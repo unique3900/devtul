@@ -21,6 +21,8 @@ import {
   Edit3,
   CheckCircle,
   Circle,
+  Lock,
+  Crown,
 } from "lucide-react"
 import { motion } from "framer-motion"
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
@@ -41,6 +43,16 @@ interface Todo {
   tags: string[]
   createdAt: string
   status: "todo" | "in-progress" | "done"
+}
+
+interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
+  initials: string
+  role: string
+  plan: "free" | "premium" | "enterprise"
 }
 
 export default function TodosPage() {
@@ -119,6 +131,8 @@ export default function TodosPage() {
   const [filter, setFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProject, setSelectedProject] = useState("all")
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [showPremiumDialog, setShowPremiumDialog] = useState(false)
 
   const projects = ["E-commerce Website", "Corporate Blog", "Landing Page", "Infrastructure"]
 
@@ -321,6 +335,85 @@ export default function TodosPage() {
     </Draggable>
   )
 
+  const canAccessFeature = (feature: string) => {
+    if (!currentUser) return false
+
+    const premiumFeatures = ["advanced-kanban", "team-collaboration", "custom-fields", "automation"]
+    const enterpriseFeatures = ["analytics", "integrations", "custom-workflows"]
+
+    console.log(`Checking feature: ${feature}, User plan: ${currentUser.plan}`) // Debug log
+
+    if (enterpriseFeatures.includes(feature)) {
+      return currentUser.plan === "enterprise"
+    }
+
+    if (premiumFeatures.includes(feature)) {
+      return currentUser.plan === "premium" || currentUser.plan === "enterprise"
+    }
+
+    return true
+  }
+
+  const loadInitialData = () => {
+    // Load current user with proper plan detection
+    const demoUser = localStorage.getItem("demoUser")
+    let userPlan = "free" // default
+
+    // Check for premium credentials in localStorage or demo data
+    const premiumCredentials = localStorage.getItem("premiumUser")
+    const userEmail = demoUser ? JSON.parse(demoUser).email : ""
+
+    // Set premium for specific demo emails or if premium flag exists
+    if (
+      premiumCredentials ||
+      userEmail === "premium@devtul.com" ||
+      userEmail === "admin@devtul.com" ||
+      userEmail?.includes("premium")
+    ) {
+      userPlan = "premium"
+    }
+
+    if (demoUser) {
+      const user = JSON.parse(demoUser)
+      const currentUserData: User = {
+        id: user.id || "1",
+        name: user.name || "Demo User",
+        email: user.email || "demo@devtul.com",
+        avatar: user.image || "/placeholder.svg?height=32&width=32",
+        initials:
+          user.name
+            ?.split(" ")
+            .map((n: string) => n[0])
+            .join("") || "DU",
+        role: "owner",
+        plan: userPlan as "free" | "premium" | "enterprise",
+      }
+      setCurrentUser(currentUserData)
+    } else {
+      // Default demo user
+      const currentUserData: User = {
+        id: "1",
+        name: "Demo User",
+        email: "demo@devtul.com",
+        avatar: "/placeholder.svg?height=32&width=32",
+        initials: "DU",
+        role: "owner",
+        plan: "free",
+      }
+      setCurrentUser(currentUserData)
+    }
+
+    // Rest of the function remains the same...
+  }
+
+  const openTaskDialog = () => {
+    alert("Open Task Dialog")
+  }
+
+  useState(() => {
+    loadInitialData()
+  }, [])
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -331,15 +424,70 @@ export default function TodosPage() {
         transition={{ duration: 0.5 }}
       >
         <div>
-          <h1 className="text-3xl font-bold">Project Kanban</h1>
-          <p className="text-muted-foreground">Manage your tasks with project-wise kanban boards</p>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            Project Kanban
+            {!canAccessFeature("advanced-kanban") && (
+              <Badge className="bg-yellow-100 text-yellow-800">
+                <Lock className="mr-1 h-3 w-3" />
+                Limited
+              </Badge>
+            )}
+            {currentUser?.plan === "premium" && (
+              <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-600 text-white">
+                <Crown className="mr-1 h-3 w-3" />
+                Premium
+              </Badge>
+            )}
+          </h1>
+          <p className="text-muted-foreground">
+            Manage your tasks with project-wise kanban boards
+            {currentUser && (
+              <span className="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">
+                Current Plan: {currentUser.plan.charAt(0).toUpperCase() + currentUser.plan.slice(1)}
+              </span>
+            )}
+          </p>
         </div>
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-            <Plus className="mr-2 h-4 w-4" />
-            New Task
+        <div className="flex items-center gap-2">
+          {/* Demo Plan Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (currentUser) {
+                const newPlan = currentUser.plan === "free" ? "premium" : "free"
+                const updatedUser = { ...currentUser, plan: newPlan as "free" | "premium" | "enterprise" }
+                setCurrentUser(updatedUser)
+
+                // Store premium status
+                if (newPlan === "premium") {
+                  localStorage.setItem("premiumUser", "true")
+                } else {
+                  localStorage.removeItem("premiumUser")
+                }
+              }
+            }}
+            className="text-xs"
+          >
+            {currentUser?.plan === "free" ? "Upgrade to Premium" : "Downgrade to Free"}
           </Button>
-        </motion.div>
+
+          {!canAccessFeature("advanced-kanban") && (
+            <Button variant="outline" onClick={() => setShowPremiumDialog(true)}>
+              <Crown className="mr-2 h-4 w-4" />
+              Upgrade
+            </Button>
+          )}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={() => openTaskDialog()}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Task
+            </Button>
+          </motion.div>
+        </div>
       </motion.div>
 
       {/* Add Todo */}
