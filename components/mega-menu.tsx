@@ -17,7 +17,7 @@ export function MegaMenu() {
         </Button>
 
         {isOpen && (
-          <div className="absolute top-full left-0 w-screen max-w-4xl bg-white border shadow-2xl rounded-lg mt-2 p-8 z-50">
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-screen max-w-4xl bg-white border shadow-2xl rounded-lg mt-2 p-8 z-50">
             <div className="grid grid-cols-3 gap-8">
               {/* Testing Tools */}
               <div>

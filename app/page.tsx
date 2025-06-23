@@ -12,7 +12,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
-        <div className="container flex h-16 items-center justify-between px-4">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 max-w-7xl">
           <div className="flex items-center space-x-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
               <Shield className="h-5 w-5 text-white" />
@@ -42,7 +42,7 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section className="py-24 bg-white">
-        <div className="container px-4">
+        <div className="container mx-auto px-4 max-w-7xl">
           <div className="text-center mb-16">
             <Badge className="mb-4" variant="secondary">
               Features
@@ -110,7 +110,7 @@ export default function LandingPage() {
 
       {/* CTA Section */}
       <section className="py-24 bg-gradient-to-r from-blue-600 to-purple-600">
-        <div className="container px-4 text-center">
+        <div className="container mx-auto px-4 max-w-7xl text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to optimize your web projects?</h2>
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
             Join thousands of developers who trust Devtul for their web testing and monitoring needs.
@@ -136,7 +136,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="bg-slate-900 text-white py-12">
-        <div className="container px-4">
+        <div className="container mx-auto px-4 max-w-7xl">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">

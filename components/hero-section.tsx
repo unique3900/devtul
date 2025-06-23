@@ -74,7 +74,7 @@ export function HeroSection() {
         }}
       />
 
-      <div className="container px-4 relative">
+      <div className="container mx-auto px-4 relative max-w-7xl">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <motion.div className="space-y-8" variants={containerVariants} initial="hidden" animate="visible">
             <motion.div variants={itemVariants}>

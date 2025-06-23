@@ -92,7 +92,7 @@ export function PricingSection() {
 
   return (
     <section className="py-24 bg-slate-50">
-      <div className="container px-4">
+      <div className="container mx-auto px-4 max-w-7xl">
         <motion.div
           className="text-center mb-16"
           initial={{ opacity: 0, y: 30 }}
