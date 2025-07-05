@@ -14,8 +14,8 @@ import { signIn } from "next-auth/react"
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [email, setEmail] = useState("demo@devtul.com")
-  const [password, setPassword] = useState("demopassword")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const router = useRouter()
 
   const handleDemoLogin = async () => {
@@ -173,7 +173,7 @@ export default function LoginPage() {
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                    className="w-full bg-brand-gradient hover:bg-brand-gradient-r-hover hover:scale-105 transition-all duration-300 text-white px-4 py-2 rounded-md"
                     disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign in"}
@@ -181,44 +181,6 @@ export default function LoginPage() {
                 </motion.div>
               </form>
 
-              {/* Demo Login */}
-              <motion.div
-                className="bg-blue-50 border border-blue-200 rounded-lg p-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <h3 className="font-medium text-blue-900 mb-2">Demo Account</h3>
-                <p className="text-sm text-blue-700 mb-3">Try Devtul with pre-populated demo data</p>
-                <div className="space-y-2">
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button
-                      onClick={() => {
-                        setEmail("demo@devtul.com")
-                        handleDemoLogin()
-                      }}
-                      variant="outline"
-                      className="w-full border-blue-300 text-blue-700 hover:bg-blue-100"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Loading Demo..." : "Continue with Free Demo"}
-                    </Button>
-                  </motion.div>
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button
-                      onClick={() => {
-                        setEmail("premium@devtul.com")
-                        handleDemoLogin()
-                      }}
-                      variant="outline"
-                      className="w-full border-purple-300 text-purple-700 hover:bg-purple-100"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "Loading Premium..." : "Continue with Premium Demo"}
-                    </Button>
-                  </motion.div>
-                </div>
-              </motion.div>
 
               <div className="text-center text-sm">
                 <span className="text-muted-foreground">Don't have an account? </span>

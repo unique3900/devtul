@@ -6,37 +6,16 @@ import Link from "next/link"
 import { MegaMenu } from "@/components/mega-menu"
 import { PricingSection } from "@/components/pricing-section"
 import { HeroSection } from "@/components/hero-section"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import DashHeader from "./dashboard/dash-header"
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const session = await getServerSession(authOptions);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4 max-w-7xl">
-          <div className="flex items-center space-x-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
-              <Shield className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Devtul
-            </span>
-          </div>
-
-          <MegaMenu />
-
-          <div className="flex items-center space-x-4">
-            <Link href="/login">
-              <Button variant="ghost">Sign In</Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-                Get Started
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
-
+      <DashHeader />
       {/* Hero Section */}
       <HeroSection />
 

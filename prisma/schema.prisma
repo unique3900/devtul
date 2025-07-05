@@ -1,6 +1,6 @@
 datasource db {
   provider = "postgresql"
-  url      = env("NEXT_PUBLIC_DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -250,6 +250,8 @@ model Project {
   id                String   @id @default(cuid())
   name              String
   description       String?
+  category          String?
+  scanFrequency     ScanFrequency @default(Daily)
   complianceOptions Json?
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -268,6 +270,7 @@ model Project {
   scans             Scan[]
   projectScanTypes  ProjectScanType[]
   recentActivities  RecentActivity[]
+  projectTags       ProjectTag[]
   @@map("projects")
 }
 
@@ -475,6 +478,33 @@ model Refund {
   @@map("refunds")
 }
 
+model Tag {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  color       String?     // Hex color code for the tag
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  projectTags ProjectTag[]
+  
+  @@map("tags")
+}
+
+model ProjectTag {
+  id        String   @id @default(uuid())
+  projectId String
+  tagId     String
+  createdAt DateTime @default(now())
+  
+  // Relations
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, tagId])
+  @@map("project_tags")
+}
+
 // Enums
 enum OAuthProvider {
   Google
@@ -635,4 +665,12 @@ enum OrganizationType {
   Education
   Nonprofit
   Other
+}
+
+enum ScanFrequency {
+  Hourly
+  Daily
+  Weekly
+  Monthly
+  Manual
 }

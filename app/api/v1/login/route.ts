@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       lastName: user.lastName,
       avatar: user.avatar,
       isEmailVerified: user.isEmailVerified,
-      organizations: user.organizationMemberships.map(membership => ({
+      organizations: user.organizationMemberships.map((membership: any) => ({
         id: membership.organization.id,
         name: membership.organization.name,
         role: membership.role,

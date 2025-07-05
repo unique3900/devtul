@@ -222,7 +222,7 @@ export default function SignupPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
               <Shield className="h-6 w-6 text-white" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            <span className="text-2xl font-bold bg-brand-gradient bg-clip-text text-transparent">
               Devtul
             </span>
           </Link>
@@ -244,9 +244,9 @@ export default function SignupPage() {
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
                     step < currentStep
-                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                      ? "bg-brand-gradient text-white"
                       : step === currentStep
-                        ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white ring-4 ring-blue-100"
+                        ? "bg-brand-gradient text-white ring-4 ring-blue-100"
                         : "bg-gray-200 text-gray-500"
                   }`}
                 >
@@ -265,7 +265,7 @@ export default function SignupPage() {
           {/* Progress Bar */}
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
-              className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full transition-all duration-500 ease-out"
+              className="bg-brand-gradient h-2 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${(currentStep / 4) * 100}%` }}
             />
           </div>
@@ -508,7 +508,7 @@ export default function SignupPage() {
               {currentStep < 4 ? (
                 <Button
                   onClick={handleNextStep}
-                  className={`bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 ${
+                  className={`bg-brand-gradient hover:bg-brand-gradient-r-hover hover:scale-105 transition-all duration-300 text-white px-4 py-2 rounded-md ${
                     currentStep === 1 ? "w-full" : "flex-1"
                   }`}
                   disabled={!getStepValidation()}
@@ -519,7 +519,7 @@ export default function SignupPage() {
               ) : (
                 <Button
                   onClick={handleSignup}
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  className="flex-1 bg-brand-gradient hover:bg-brand-gradient-r-hover hover:scale-105 transition-all duration-300 text-white px-4 py-2 rounded-md"
                   disabled={isLoading || !getStepValidation()}
                 >
                   {isLoading ? "Creating account..." : "Create account"}

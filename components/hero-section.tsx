@@ -162,12 +162,7 @@ export function HeroSection() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.8 + index * 0.1 }}
                 >
-                  <motion.div
-                    animate={{ rotate: [0, 360] }}
-                    transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-                  >
-                    <item.icon className={`h-5 w-5 ${item.color}`} />
-                  </motion.div>
+                  <item.icon className={`h-5 w-5 ${item.color}`} />
                   <span className="text-sm text-muted-foreground">{item.text}</span>
                 </motion.div>
               ))}

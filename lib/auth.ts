@@ -203,7 +203,7 @@ export const authOptions: NextAuthOptions = {
         token.refreshToken = newRefreshToken
         token.refreshTokenExpiry = Date.now() + (24 * 60 * 60 * 1000) // 24 hours from now
         
-        // Update user's refresh token in database
+        // Update user's refresh token in databasepay
         try {
           await db.user.update({
             where: { id: token.id as string },
