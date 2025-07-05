@@ -1,17 +1,44 @@
 import { organizationCreateSchema } from "@/app/actions/organization/schema";
 import { OrganizationCreateData } from "@/app/actions/organization/types";
-import db from "@/db";
 import { NextRequest, NextResponse } from "next/server";
+
+// Import db only when needed to avoid build-time issues
+let db: any = null;
+
+async function getDb() {
+  if (!db) {
+    try {
+      const { default: prisma } = await import("@/db");
+      db = prisma;
+    } catch (error) {
+      console.error("Failed to import database:", error);
+      throw new Error("Database connection failed");
+    }
+  }
+  return db;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
     // Convert File object data back to proper format for validation
-    const dataForValidation = {
-      ...body,
-      logo: body.logo ? new File([], body.logo.name || 'logo', { type: body.logo.type }) : undefined
-    };
+    let dataForValidation = { ...body };
+    
+    if (body.logo && typeof body.logo === 'object') {
+      try {
+        dataForValidation.logo = new File([], body.logo.name || 'logo', { 
+          type: body.logo.type || 'image/png' 
+        });
+      } catch (error) {
+        // If File constructor fails, create a mock file object
+        dataForValidation.logo = {
+          name: body.logo.name || 'logo',
+          type: body.logo.type || 'image/png',
+          size: body.logo.size || 0
+        } as any;
+      }
+    }
     
     const parseResult = organizationCreateSchema.safeParse(dataForValidation);
 
@@ -45,8 +72,11 @@ export async function POST(request: NextRequest) {
       organizationData.logo = parseResult.data.logo.name;
     }
 
+    // Get database connection
+    const database = await getDb();
+
     // Check if organization with same slug already exists
-    const existingOrganization = await db.organization.findFirst({
+    const existingOrganization = await database.organization.findFirst({
       where: {
         slug: organizationData.slug,
       },
@@ -64,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if contact email is already used by another organization
-    const existingEmail = await db.organization.findFirst({
+    const existingEmail = await database.organization.findFirst({
       where: {
         contactEmail: organizationData.contactEmail,
       },
@@ -82,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the organization only after all validations pass
-    const organization = await db.organization.create({
+    const organization = await database.organization.create({
       data: organizationData,
     });
 

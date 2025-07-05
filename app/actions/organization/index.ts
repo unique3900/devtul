@@ -25,9 +25,14 @@ export async function createOrganization(data: OrganizationCreateInput) {
       } : undefined
     };
 
-    // Determine API URL
-    const baseUrl = process.env.NEXTAUTH_URL || 
-                   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    // Determine API URL - use environment variables or default to localhost
+    let baseUrl = 'http://localhost:3000';
+    
+    if (process.env.NEXTAUTH_URL) {
+      baseUrl = process.env.NEXTAUTH_URL;
+    } else if (process.env.VERCEL_URL) {
+      baseUrl = `https://${process.env.VERCEL_URL}`;
+    }
 
     // Make API call to the signup route
     const response = await fetch(`${baseUrl}/api/v1/signup`, {

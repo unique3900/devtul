@@ -3,7 +3,11 @@ import { OrganizationType, OrganizationSize } from "@prisma/client";
 
 export const organizationCreateSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
-  logo: z.instanceof(File).optional(),
+  logo: z.any().optional().refine((val) => {
+    if (!val) return true; // Optional field
+    // Check if it's a File instance or has File-like properties
+    return val instanceof File || (typeof val === 'object' && val && 'name' in val);
+  }, "Invalid file object"),
   website: z.string().optional().refine((val) => {
     if (!val) return true; // Optional field
     try {
