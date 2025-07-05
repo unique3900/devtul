@@ -1,0 +1,637 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                    String                  @id @default(uuid())
+  email                 String                  @unique
+  password              String?                 @db.VarChar(255) // Nullable for OAuth users
+  firstName             String?
+  lastName              String?
+  phone                 String?
+  avatar                String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  isActive              Boolean                 @default(true)
+  isEmailVerified       Boolean                 @default(false)
+  isPhoneVerified       Boolean                 @default(false)
+  lastLoginAt           DateTime?
+  loginAttempts         Int                     @default(0)
+  lockedUntil           DateTime?
+  twoFactorEnabled      Boolean                 @default(false)
+  twoFactorSecret       String?
+  refreshToken          String?
+  refreshTokenExpiry    DateTime?
+  
+  // Notification preferences
+  emailNotifications    Boolean                 @default(true)
+  pushNotifications     Boolean                 @default(true)
+  inAppNotifications    Boolean                 @default(true)
+  
+  // Organization relations
+  organizationMemberships OrganizationMember[]
+  
+  // Project relations
+  ownedProjects         Project[]               @relation("ProjectOwner")
+  projectMemberships    ProjectMember[]
+  scanHistory           Scan[]                  @relation("ScanUser")
+  
+  // Notification relations
+  notifications         UserNotification[]
+  
+  // OAuth accounts
+  oauthAccounts         OAuthAccount[]
+  
+  // Session management
+  sessions              Session[]
+  
+  @@map("users")
+}
+
+model Organization {
+  id                String   @id @default(uuid())
+  name              String
+  contactName       String?
+  contactEmail      String?
+  contactPhone      String?
+  slug              String   @unique
+  description       String?
+  logo              String?
+  website           String?
+  industry          String?
+  type              OrganizationType
+  size              OrganizationSize?
+  isActive          Boolean  @default(true)
+  settings          Json?    // Organization-specific settings
+  accountType       UserAccountType         @default(Free)
+  acceptTerms       Boolean                 @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  members           OrganizationMember[]
+  projects          Project[]
+  subscriptions     Subscription[]
+  recentActivities  RecentActivity[]
+  paymentMethods    PaymentMethod[]
+  paymentHistories  PaymentHistory[]
+  invoices          Invoice[]
+  refunds           Refund[]
+  organizationSubscriptions OrganizationSubscription[]
+  
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid())
+  userId         String
+  organizationId String
+  role           OrganizationRole
+  invitedBy      String?
+  invitedAt      DateTime         @default(now())
+  joinedAt       DateTime?
+  isActive       Boolean          @default(true)
+  
+  // Relations
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, organizationId])
+  @@map("organization_members")
+}
+
+model OrganizationSubscription {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  planId                String
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean                 @default(false)
+  canceledAt            DateTime?
+  trialStart            DateTime?
+  trialEnd              DateTime?
+  seats                 Int                     @default(1) // Number of seats/licenses
+  usedSeats             Int                     @default(0) // Currently used seats
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@map("organization_subscriptions")
+}
+
+model Notification {
+  id                String            @id @default(uuid())
+  type              NotificationType
+  title             String
+  description       String
+  color             String?           // Hex color code
+  icon              String?           // Icon name or URL
+  priority          NotificationPriority @default(Medium)
+  category          NotificationCategory
+  isGlobal          Boolean           @default(false) // System-wide notification
+  expiresAt         DateTime?
+  metadata          Json?             // Additional data
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  // Relations
+  userNotifications UserNotification[]
+  
+  @@map("notifications")
+}
+
+model RecentActivity{
+  id String @id @default(uuid())
+  organizationId String
+  message String
+  title String
+  type String
+  color String
+  icon String
+  priority String
+  category String
+  isGlobal Boolean
+  organization Organization @relation(fields: [organizationId], references: [id])
+  projectId String
+  project Project @relation(fields: [projectId], references: [id])
+  scanId String
+  scan Scan @relation(fields: [scanId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserNotification {
+  id             String   @id @default(uuid())
+  userId         String
+  notificationId String
+  isRead         Boolean  @default(false)
+  readAt         DateTime?
+  isDismissed    Boolean  @default(false)
+  dismissedAt    DateTime?
+  deliveredAt    DateTime?
+  actionTaken    String?  // Track if user took action
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, notificationId])
+  @@index([userId, isRead])
+  @@map("user_notifications")
+}
+
+model NotificationTemplate {
+  id          String            @id @default(uuid())
+  name        String            @unique
+  type        NotificationType
+  title       String
+  description String
+  color       String?
+  icon        String?
+  priority    NotificationPriority @default(Medium)
+  category    NotificationCategory
+  variables   String[]          // Template variables like {{userName}}, {{projectName}}
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  @@map("notification_templates")
+}
+
+model OAuthAccount {
+  id                String    @id @default(uuid())
+  userId            String
+  provider          OAuthProvider
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         DateTime?
+  tokenType         String?
+  scope             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+model Project {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  complianceOptions Json?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  scanToken         String   @unique
+  
+  // Organization relation
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  
+  // Relations
+  owner             User     @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId           String
+  members           ProjectMember[]
+  urls              Url[]
+  scans             Scan[]
+  projectScanTypes  ProjectScanType[]
+  recentActivities  RecentActivity[]
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  userId    String
+  projectId String
+  role      ProjectRole
+  invitedBy String?
+  invitedAt DateTime @default(now())
+  joinedAt  DateTime?
+  isActive  Boolean  @default(true)
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, projectId])
+  @@map("project_members")
+}
+
+model ProjectScanType {
+  id        String   @id @default(uuid())
+  projectId String
+  scanType  ScanType
+  isEnabled Boolean  @default(true)
+  config    Json?    // Configuration for specific scan type
+  
+  // Relations
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, scanType])
+  @@map("project_scan_types")
+}
+
+model Scan {
+  id              String   @id @default(uuid())
+  projectId       String
+  urlId           String?
+  scanType        ScanType
+  status          ScanStatus
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  errorMessage    String?
+  scanConfig      Json?    // Scan configuration used
+  
+  // Relations
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url             Url?         @relation(fields: [urlId], references: [id])
+  results         ScanResult[]
+  initiatedBy     User         @relation("ScanUser", fields: [initiatedById], references: [id])
+  initiatedById   String
+  recentActivities RecentActivity[]
+  @@map("scans")
+}
+
+model ScanResult {
+  id          String   @id @default(cuid())
+  scanId      String
+  url         String
+  message     String
+  element     String?
+  severity    SeverityLevel
+  impact      String?
+  help        String?
+  tags        String[]
+  elementPath String?
+  details     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  
+  @@index([scanId])
+  @@map("scan_results")
+}
+
+model Url {
+  id        String   @id @default(uuid())
+  url       String
+  projectId String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  scans     Scan[]
+  
+  @@unique([projectId, url])
+  @@index([projectId])
+  @@map("urls")
+}
+
+model PaymentMethod {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  name                  String                  // e.g., "Visa ending in 1234"
+  type                  PaymentMethodType
+  lastFourDigits        String?                 // Last 4 digits of card
+  expiryMonth           Int?
+  expiryYear            Int?
+  isDefault             Boolean                 @default(false)
+  isActive              Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentHistories      PaymentHistory[]
+  
+  @@map("payment_methods")
+}
+
+model PaymentHistory {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  paymentMethodId       String?
+  subscriptionId        String?
+  invoiceId             String?
+  amount                Float
+  currency              String                  @default("USD")
+  status                PaymentStatus
+  paymentDate           DateTime                @default(now())
+  description           String?
+  transactionId         String?                 // External payment processor transaction ID
+  metadata              Json?                   // Additional payment data
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentMethod         PaymentMethod?          @relation(fields: [paymentMethodId], references: [id])
+  subscription          Subscription?           @relation(fields: [subscriptionId], references: [id])
+  invoice               Invoice?                @relation(fields: [invoiceId], references: [id])
+  refunds               Refund[]
+  
+  @@map("payment_histories")
+}
+
+model Subscription {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  planId                String
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean                 @default(false)
+  canceledAt            DateTime?
+  trialStart            DateTime?
+  trialEnd              DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentHistories      PaymentHistory[]
+  invoices              Invoice[]
+  
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  subscriptionId        String?
+  number                String                  @unique // Invoice number
+  amount                Float
+  currency              String                  @default("USD")
+  status                InvoiceStatus
+  dueDate               DateTime
+  paidAt                DateTime?
+  description           String?
+  metadata              Json?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription          Subscription?           @relation(fields: [subscriptionId], references: [id])
+  paymentHistories      PaymentHistory[]
+  
+  @@map("invoices")
+}
+
+model Refund {
+  id                    String                  @id @default(uuid())
+  organizationId        String
+  paymentHistoryId      String
+  amount                Float
+  currency              String                  @default("USD")
+  reason                RefundReason
+  status                RefundStatus
+  refundDate            DateTime                @default(now())
+  description           String?
+  metadata              Json?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  
+  // Relations
+  organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentHistory        PaymentHistory          @relation(fields: [paymentHistoryId], references: [id], onDelete: Cascade)
+  
+  @@map("refunds")
+}
+
+// Enums
+enum OAuthProvider {
+  Google
+  Facebook
+  GitHub
+  Twitter
+  LinkedIn
+}
+
+enum OrganizationRole {
+  Owner
+  Admin
+  Member
+  Viewer
+}
+
+enum OrganizationSize {
+  Small
+  Medium
+  Large
+  Enterprise
+}
+
+enum ProjectRole {
+  Owner
+  Admin
+  Collaborator
+  Viewer
+}
+
+enum ScanType {
+  SEO
+  WCAG
+  Security
+  SSLTLS
+  Performance
+  Uptime
+  Accessibility
+  SEO_AUDIT
+  SECURITY_AUDIT
+  PERFORMANCE_AUDIT
+}
+
+enum ScanStatus {
+  Pending
+  Running
+  Completed
+  Failed
+  Canceled
+}
+
+enum SeverityLevel {
+  Critical
+  High
+  Medium
+  Low
+  Info
+}
+
+enum NotificationType {
+  Info
+  Success
+  Warning
+  Error
+  System
+  Result
+  General
+  PushNotification
+  Alert
+  Security
+  Performance
+  Compliance
+}
+
+enum NotificationPriority {
+  Low
+  Medium
+  High
+  Critical
+  Urgent
+}
+
+enum NotificationCategory {
+  System
+  Security
+  Performance
+  Compliance
+  Billing
+  Project
+  Scan
+  User
+  Organization
+  General
+}
+
+enum UserAccountType {
+  Free
+  Premium
+  Enterprise
+}
+
+enum PaymentMethodType {
+  CreditCard
+  DebitCard
+  BankTransfer
+  PayPal
+  ApplePay
+  GooglePay
+  Crypto
+}
+
+enum PaymentStatus {
+  Pending
+  Processing
+  Completed
+  Failed
+  Canceled
+  Refunded
+}
+
+enum SubscriptionStatus {
+  Active
+  Canceled
+  Past_Due
+  Unpaid
+  Trialing
+  Paused
+}
+
+enum InvoiceStatus {
+  Draft
+  Open
+  Paid
+  Void
+  Uncollectible
+}
+
+enum RefundReason {
+  RequestedByCustomer
+  Duplicate
+  Fraudulent
+  ProductNotReceived
+  ProductNotAsDescribed
+  GeneralAdjustment
+}
+
+enum RefundStatus {
+  Pending
+  Succeeded
+  Failed
+  Canceled
+}
+
+enum OrganizationType {
+  Company
+  Agency
+  Government
+  Education
+  Nonprofit
+  Other
+}
