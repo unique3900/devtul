@@ -13,7 +13,6 @@ bun.lockb
 # testing
 /coverage
 
-
 # next.js
 /.next/
 /out/
