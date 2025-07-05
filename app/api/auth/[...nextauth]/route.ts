@@ -1,21 +1,6 @@
-// Simple demo auth endpoint
-export async function POST(request: Request) {
-  const body = await request.json()
+import NextAuth from "next-auth"
+import { authOptions } from "@/lib/auth"
 
-  if (body.email && body.password) {
-    return Response.json({
-      user: {
-        id: "1",
-        name: "Demo User",
-        email: body.email,
-        image: "/placeholder.svg?height=40&width=40",
-      },
-    })
-  }
+const handler = NextAuth(authOptions)
 
-  return Response.json({ error: "Invalid credentials" }, { status: 401 })
-}
-
-export async function GET() {
-  return Response.json({ message: "Auth endpoint" })
-}
+export { handler as GET, handler as POST }

@@ -18,14 +18,17 @@ import { Bell, Search, Settings, LogOut, User, CreditCard, HelpCircle } from "lu
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { signOut, useSession } from "next-auth/react"
 
 export function DashboardHeader() {
   const [searchQuery, setSearchQuery] = useState("")
   const router = useRouter()
+  const { data: session } = useSession()
 
   const handleLogout = () => {
-    localStorage.removeItem("demoUser")
-    router.push("/login")
+    signOut({
+      callbackUrl: "/login",
+    })
   }
 
   const handleSearch = (e: React.FormEvent) => {
@@ -125,7 +128,7 @@ export function DashboardHeader() {
                 <Avatar className="h-10 w-10">
                   <AvatarImage src="/placeholder-avatar.jpg" alt="User" />
                   <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-                    DU
+                    {session?.user?.name?.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -133,8 +136,8 @@ export function DashboardHeader() {
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Demo User</p>
-                  <p className="text-xs leading-none text-muted-foreground">demo@devtul.com</p>
+                  <p className="text-sm font-medium leading-none">{session?.user?.name}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{session?.user?.email}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

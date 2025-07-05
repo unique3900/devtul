@@ -1,4 +1,4 @@
-import { OrganizationType, OrganizationSize } from "@prisma/client";
+import { OrganizationType, OrganizationSize, UserAccountType } from "@prisma/client";
 
 export interface OrganizationCreateData {
   name: string;
@@ -10,6 +10,7 @@ export interface OrganizationCreateData {
   website?: string;
   size?: OrganizationSize;
   logo?: string;
+  accountType: UserAccountType;
 }
 
 export interface OrganizationCreateInput {

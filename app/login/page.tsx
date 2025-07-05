@@ -9,6 +9,7 @@ import { Shield, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -47,6 +48,27 @@ export default function LoginPage() {
       window.location.href = "/dashboard"
     } catch (error) {
       console.error("Login error:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogin = async () => {
+    setIsLoading(true)
+    try {
+      const result = await signIn("credentials", {
+        email: email,
+        password: password,
+        redirect: false,
+      })
+      if (result?.error) {
+        console.error("Login error:", result.error)
+      }
+      else {
+        router.push("/dashboard")
+      }
+    } catch (error) {
+      console.error("Login error:", error)  
     } finally {
       setIsLoading(false)
     }
@@ -99,7 +121,7 @@ export default function LoginPage() {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault()
-                  handleDemoLogin()
+                  handleLogin()
                 }}
               >
                 <div className="space-y-2">
