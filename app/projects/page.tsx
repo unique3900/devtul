@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { getProjects } from "@/app/actions/project";
 import { ProjectsHeader } from "@/components/projects-header";
 import { ProjectsList } from "@/components/projects-list";
 import { ProjectsLoading } from "@/components/projects-loading";
@@ -14,9 +13,9 @@ interface ProjectsPageProps {
 }
 
 /**
- * Projects Page - SSR Implementation
+ * Projects Page - Client-Side Fetching
  * 
- * This page uses Server-Side Rendering (SSR) to fetch and display projects
+ * This page uses API routes to fetch and display projects
  * based on user access levels and search parameters.
  * 
  * Access Control:
@@ -24,62 +23,52 @@ interface ProjectsPageProps {
  * - Regular users can only view projects they own within their organization
  * 
  * Features:
- * - SSR for initial page load performance
+ * - API routes for data fetching
  * - Dynamic search and filtering
  * - Role-based access control
  * - Optimized database queries with indexing
  */
-export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
+export default function ProjectsPage({ searchParams }: ProjectsPageProps) {
   return (
     <div className="space-y-8">
       <ProjectsHeader />
       
       <Suspense fallback={<ProjectsLoading />}>
-        <ProjectsContent searchParams={searchParams} />
+        <ProjectsList searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function ProjectsContent({ searchParams }: { searchParams: ProjectsPageProps['searchParams'] }) {
-  const result = await getProjects(searchParams);
-
-  if (!result.success) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">{result.error}</p>
-      </div>
-    );
-  }
-
-  return <ProjectsList initialProjects={result.projects || []} searchParams={searchParams} />;
-}
-
 /**
  * Technical Implementation Notes:
  * 
- * 1. SSR (Server-Side Rendering):
- *    - Initial page load renders on server
- *    - Faster perceived performance
- *    - SEO-friendly
- *    - Used in: This page component and ProjectsContent
+ * 1. API Routes:
+ *    - Data fetching through API routes
+ *    - RESTful endpoints for CRUD operations
+ *    - Used in: /api/v1/projects endpoints
  * 
  * 2. Server Actions:
- *    - Database access through server actions
+ *    - Only for form submissions and mutations
  *    - Authentication handled server-side
- *    - Used in: getProjects() action
+ *    - Used in: createProject, updateProject, deleteProject actions
  * 
  * 3. Client Components:
  *    - Interactive elements (search, filters, sorting)
- *    - Real-time filtering and pagination
+ *    - Real-time filtering and data fetching
  *    - Used in: ProjectsList, ProjectsHeader components
  * 
  * 4. Access Control:
  *    - Role-based project visibility
- *    - Implemented in server action with database-level filtering
+ *    - Implemented in API routes with database-level filtering
  * 
  * 5. Performance Optimizations:
  *    - Database indexes on commonly queried fields
  *    - Selective field fetching
- *    - Suspense for loading states
+ *    - Client-side caching and state management
+ * 
+ * 6. CRUD Operations:
+ *    - Full project management (create, read, update, delete)
+ *    - Edit project functionality with form pre-population
+ *    - URL management within projects
  */

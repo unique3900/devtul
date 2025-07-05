@@ -129,92 +129,41 @@ export async function createProject(data: unknown): Promise<ProjectCreateResult>
   }
 }
 
-export async function getProjects(searchParams?: {
-  search?: string;
-  sortBy?: 'name' | 'lastScan' | 'issues' | 'created';
-  sortOrder?: 'asc' | 'desc';
-  status?: string;
-}) {
+export async function updateProject(projectId: string, data: unknown): Promise<ProjectCreateResult> {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return { success: false, error: "Authentication required" };
     }
 
-    const { search, sortBy = 'name', sortOrder = 'asc', status } = searchParams || {};
-    const user = session.user;
+    const validatedData = projectCreateSchema.parse(data);
+    const { enabledTools, tags, additionalUrls, url, ...projectData } = validatedData;
 
-    // Determine access level based on user's role in organization
-    const isOwner = user.organizations?.some(org => org.role === 'Owner');
-    const organizationId = user.primaryOrganization?.id;
-
-    let whereClause: any = {};
-
-    // Access control: Owner sees all org projects, others see only their own
-    if (isOwner && organizationId) {
-      whereClause.organizationId = organizationId;
-    } else {
-      whereClause.ownerId = user.id;
-      if (organizationId) {
-        whereClause.organizationId = organizationId;
+    // Check if user has permission to update this project
+    const existingProject = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: session.user.id },
+          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } } }
+        ]
       }
+    });
+
+    if (!existingProject) {
+      return { success: false, error: "Project not found or access denied" };
     }
 
-    // Add search filter
-    if (search) {
-      whereClause.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { urls: { some: { url: { contains: search, mode: 'insensitive' } } } }
-      ];
-    }
-
-    // Add status filter
-    if (status && status !== 'all') {
-      whereClause.status = status;
-    }
-
-    // Determine sort order
-    let orderBy: any = {};
-    switch (sortBy) {
-      case 'lastScan':
-        orderBy = { lastScanAt: sortOrder };
-        break;
-      case 'issues':
-        orderBy = { totalIssues: sortOrder };
-        break;
-      case 'created':
-        orderBy = { createdAt: sortOrder };
-        break;
-      default:
-        orderBy = { name: sortOrder };
-    }
-
-    const projects = await prisma.project.findMany({
-      where: whereClause,
-      orderBy,
+    // Update project
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: projectData,
       include: {
-        urls: {
-          select: {
-            url: true,
-            isActive: true,
-          },
-          take: 1, // Get primary URL
-        },
+        urls: true,
+        projectScanTypes: true,
         projectTags: {
           include: {
-            tag: {
-              select: {
-                name: true,
-                color: true,
-              },
-            },
-          },
-        },
-        projectScanTypes: {
-          select: {
-            scanType: true,
-            isEnabled: true,
+            tag: true,
           },
         },
         _count: {
@@ -226,36 +175,167 @@ export async function getProjects(searchParams?: {
       },
     });
 
-         // Transform the data for the frontend
-     const transformedProjects = projects.map(project => ({
-       id: project.id,
-       name: project.name,
-       description: project.description,
-       category: project.category,
-       url: project.urls[0]?.url || '',
-       status: (project as any).status || 'Active',
-       lastScan: (project as any).lastScanAt,
-       nextScan: (project as any).nextScanAt,
-       created: project.createdAt,
-       scores: (project as any).scores || {},
-       totalIssues: (project as any).totalIssues || 0,
-       criticalIssues: (project as any).criticalIssues || 0,
-       highIssues: (project as any).highIssues || 0,
-       mediumIssues: (project as any).mediumIssues || 0,
-       lowIssues: (project as any).lowIssues || 0,
-       tags: project.projectTags.map(pt => ({
-         name: pt.tag.name,
-         color: pt.tag.color,
-       })),
-       enabledScans: project.projectScanTypes.filter(pst => pst.isEnabled).map(pst => pst.scanType),
-       urlCount: project._count.urls,
-       scanCount: project._count.scans,
-     }));
+    // Update main URL if provided
+    if (url) {
+      await prisma.url.updateMany({
+        where: { projectId, isActive: true },
+        data: { url }
+      });
+    }
 
-    return { success: true, projects: transformedProjects };
+    // Handle additional URLs
+    if (additionalUrls && additionalUrls.length > 0) {
+      // Delete existing additional URLs
+      await prisma.url.deleteMany({
+        where: { projectId, url: { not: url } }
+      });
+      
+      // Add new additional URLs
+      await prisma.url.createMany({
+        data: additionalUrls.map((additionalUrl) => ({
+          url: additionalUrl,
+          projectId,
+          isActive: true,
+        })),
+      });
+    }
+
+    // Update scan types
+    await prisma.projectScanType.deleteMany({
+      where: { projectId }
+    });
+
+    const scanTypesToCreate = [];
+    if (enabledTools.security) scanTypesToCreate.push("Security");
+    if (enabledTools.seo) scanTypesToCreate.push("SEO");
+    if (enabledTools.accessibility) scanTypesToCreate.push("Accessibility");
+    if (enabledTools.performance) scanTypesToCreate.push("Performance");
+    if (enabledTools.uptime) scanTypesToCreate.push("Uptime");
+    if (enabledTools.ssl) scanTypesToCreate.push("SSLTLS");
+
+    if (scanTypesToCreate.length > 0) {
+      await prisma.projectScanType.createMany({
+        data: scanTypesToCreate.map((scanType) => ({
+          projectId,
+          scanType: scanType as any,
+          isEnabled: true,
+        })),
+      });
+    }
+
+    // Update tags
+    await prisma.projectTag.deleteMany({
+      where: { projectId }
+    });
+
+    if (tags && tags.length > 0) {
+      for (const tagName of tags) {
+        const tag = await prisma.tag.upsert({
+          where: { name: tagName },
+          create: { name: tagName },
+          update: {},
+        });
+
+        await prisma.projectTag.create({
+          data: {
+            projectId,
+            tagId: tag.id,
+          },
+        });
+      }
+    }
+
+    revalidatePath("/projects");
+    revalidatePath("/dashboard");
+
+    return { success: true, project: updatedProject as any };
   } catch (error) {
-    console.error("Error fetching projects:", error);
-    return { success: false, error: "Failed to fetch projects" };
+    console.error("Error updating project:", error);
+    return { success: false, error: "Failed to update project" };
+  }
+}
+
+export async function deleteProject(projectId: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: "Authentication required" };
+    }
+
+    // Check if user has permission to delete this project
+    const existingProject = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: session.user.id },
+          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } } }
+        ]
+      }
+    });
+
+    if (!existingProject) {
+      return { success: false, error: "Project not found or access denied" };
+    }
+
+    await prisma.project.delete({
+      where: { id: projectId }
+    });
+
+    revalidatePath("/projects");
+    revalidatePath("/dashboard");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting project:", error);
+    return { success: false, error: "Failed to delete project" };
+  }
+}
+
+export async function addUrlToProject(projectId: string, url: string) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: "Authentication required" };
+    }
+
+    // Check if user has permission to modify this project
+    const existingProject = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: session.user.id },
+          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } } }
+        ]
+      }
+    });
+
+    if (!existingProject) {
+      return { success: false, error: "Project not found or access denied" };
+    }
+
+    // Check if URL already exists
+    const existingUrl = await prisma.url.findFirst({
+      where: { projectId, url }
+    });
+
+    if (existingUrl) {
+      return { success: false, error: "URL already exists in this project" };
+    }
+
+    await prisma.url.create({
+      data: {
+        url,
+        projectId,
+        isActive: true,
+      },
+    });
+
+    revalidatePath("/projects");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error adding URL to project:", error);
+    return { success: false, error: "Failed to add URL" };
   }
 }
 export async function importFromSitemap(data: unknown): Promise<SitemapImportResult> {

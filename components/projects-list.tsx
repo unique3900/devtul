@@ -11,7 +11,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from "@/components/ui/progress";
 import {
   Search,
-  Filter,
   MoreHorizontal,
   Shield,
   Accessibility,
@@ -50,7 +49,6 @@ interface Project {
 }
 
 interface ProjectsListProps {
-  initialProjects: Project[];
   searchParams: {
     search?: string;
     sortBy?: 'name' | 'lastScan' | 'issues' | 'created';
@@ -59,20 +57,7 @@ interface ProjectsListProps {
   };
 }
 
-/**
- * ProjectsList - Client Component
- * 
- * Interactive component for displaying, searching, and filtering projects.
- * Uses client-side state for immediate feedback and URL-based state for sharing.
- * 
- * Features:
- * - Real-time search (debounced)
- * - Sorting by multiple criteria
- * - Status filtering
- * - URL state synchronization
- * - Optimistic updates
- */
-export function ProjectsList({ initialProjects, searchParams }: ProjectsListProps) {
+export function ProjectsList({ searchParams }: ProjectsListProps) {
   const router = useRouter();
   const urlSearchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -82,6 +67,76 @@ export function ProjectsList({ initialProjects, searchParams }: ProjectsListProp
   const [sortBy, setSortBy] = useState(searchParams.sortBy || "name");
   const [sortOrder, setSortOrder] = useState(searchParams.sortOrder || "asc");
   const [statusFilter, setStatusFilter] = useState(searchParams.status || "all");
+  
+  // State for projects data
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch projects from API
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("search", searchQuery);
+      if (sortBy) params.set("sortBy", sortBy);
+      if (sortOrder) params.set("sortOrder", sortOrder);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+
+      const response = await fetch(`/api/v1/projects?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch projects");
+      }
+
+      if (data.success) {
+        setProjects(data.projects || []);
+      } else {
+        setError(data.error || "Failed to fetch projects");
+      }
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch projects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch projects on mount and when filters change
+  useEffect(() => {
+    fetchProjects();
+  }, [searchQuery, sortBy, sortOrder, statusFilter]);
+
+  // Delete project function
+  const deleteProject = async (projectId: string) => {
+    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete project");
+      }
+
+      if (data.success) {
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+      } else {
+        throw new Error(data.error || "Failed to delete project");
+      }
+    } catch (err) {
+      console.error("Error deleting project:", err);
+      alert(err instanceof Error ? err.message : "Failed to delete project");
+    }
+  };
 
   // Update URL when filters change
   useEffect(() => {
@@ -211,132 +266,157 @@ export function ProjectsList({ initialProjects, searchParams }: ProjectsListProp
         </DropdownMenu>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="mt-4 text-muted-foreground">Loading projects...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-12">
+          <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-4 text-lg font-semibold text-red-600">Error loading projects</h3>
+          <p className="text-muted-foreground">{error}</p>
+          <Button onClick={fetchProjects} className="mt-4">
+            Try Again
+          </Button>
+        </div>
+      )}
+
       {/* Projects Grid */}
-      <div className={`grid gap-6 md:grid-cols-2 lg:grid-cols-3 ${isPending ? "opacity-50" : ""}`}>
-        {initialProjects.map((project) => (
-          <Card key={project.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg">{project.name}</CardTitle>
-                  <CardDescription className="text-sm">
-                    {project.description || project.url}
-                  </CardDescription>
+      {!loading && !error && (
+        <div className={`grid gap-6 md:grid-cols-2 lg:grid-cols-3 ${isPending ? "opacity-50" : ""}`}>
+          {projects.map((project) => (
+            <Card key={project.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">{project.name}</CardTitle>
+                    <CardDescription className="text-sm">
+                      {project.description || project.url}
+                    </CardDescription>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}`)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}/edit`)}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Edit Project
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-red-600" 
+                        onClick={() => deleteProject(project.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem>
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Details
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="text-red-600">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Status and Last Scan */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {getStatusIcon(project.status)}
-                  <Badge variant="secondary" className={getStatusColor(project.status)}>
-                    {project.status}
-                  </Badge>
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {formatLastScan(project.lastScan)}
-                </span>
-              </div>
-
-              {/* Scores */}
-              {Object.keys(project.scores).length > 0 && (
-                <div className="space-y-2">
-                  {Object.entries(project.scores).slice(0, 2).map(([type, score]) => (
-                    <div key={type} className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="capitalize">{type}</span>
-                        <span>{score}%</span>
-                      </div>
-                      <Progress value={score} className="h-2" />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Issues */}
-              {project.totalIssues > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                  <span>{project.totalIssues} issue{project.totalIssues !== 1 ? 's' : ''}</span>
-                  {project.criticalIssues > 0 && (
-                    <Badge variant="destructive" className="text-xs">
-                      {project.criticalIssues} critical
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Status and Last Scan */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(project.status)}
+                    <Badge variant="secondary" className={getStatusColor(project.status)}>
+                      {project.status}
                     </Badge>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {formatLastScan(project.lastScan)}
+                  </span>
+                </div>
+
+                {/* Scores */}
+                {Object.keys(project.scores).length > 0 && (
+                  <div className="space-y-2">
+                    {Object.entries(project.scores).slice(0, 2).map(([type, score]) => (
+                      <div key={type} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="capitalize">{type}</span>
+                          <span>{score}%</span>
+                        </div>
+                        <Progress value={score} className="h-2" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Issues */}
+                {project.totalIssues > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                    <span>{project.totalIssues} issue{project.totalIssues !== 1 ? 's' : ''}</span>
+                    {project.criticalIssues > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {project.criticalIssues} critical
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                {/* Tags and Enabled Scans */}
+                <div className="space-y-2">
+                  {project.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {project.tags.slice(0, 3).map((tag) => (
+                        <Badge key={tag.name} variant="outline" className="text-xs">
+                          {tag.name}
+                        </Badge>
+                      ))}
+                      {project.tags.length > 3 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{project.tags.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  
+                  {project.enabledScans.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {project.enabledScans.slice(0, 4).map((scanType) => (
+                        <div
+                          key={scanType}
+                          className="flex items-center justify-center w-6 h-6 rounded bg-muted text-muted-foreground"
+                          title={scanType}
+                        >
+                          {getScanTypeIcon(scanType)}
+                        </div>
+                      ))}
+                      {project.enabledScans.length > 4 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{project.enabledScans.length - 4}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
 
-              {/* Tags and Enabled Scans */}
-              <div className="space-y-2">
-                {project.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {project.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag.name} variant="outline" className="text-xs">
-                        {tag.name}
-                      </Badge>
-                    ))}
-                    {project.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{project.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                
-                {project.enabledScans.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    {project.enabledScans.slice(0, 4).map((scanType) => (
-                      <div
-                        key={scanType}
-                        className="flex items-center justify-center w-6 h-6 rounded bg-muted text-muted-foreground"
-                        title={scanType}
-                      >
-                        {getScanTypeIcon(scanType)}
-                      </div>
-                    ))}
-                    {project.enabledScans.length > 4 && (
-                      <span className="text-xs text-muted-foreground">
-                        +{project.enabledScans.length - 4}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Stats */}
-              <div className="flex justify-between text-sm text-muted-foreground pt-2 border-t">
-                <span>{project.urlCount} URL{project.urlCount !== 1 ? 's' : ''}</span>
-                <span>{project.scanCount} scan{project.scanCount !== 1 ? 's' : ''}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                {/* Stats */}
+                <div className="flex justify-between text-sm text-muted-foreground pt-2 border-t">
+                  <span>{project.urlCount} URL{project.urlCount !== 1 ? 's' : ''}</span>
+                  <span>{project.scanCount} scan{project.scanCount !== 1 ? 's' : ''}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
-      {initialProjects.length === 0 && (
+      {!loading && !error && projects.length === 0 && (
         <div className="text-center py-12">
           <Globe className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No projects found</h3>

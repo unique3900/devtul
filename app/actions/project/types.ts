@@ -1,4 +1,8 @@
 import { Project, ProjectScanType, Url, Tag } from "@prisma/client";
+import { z } from "zod";
+import { projectCreateSchema } from "./schema";
+
+export type ProjectFormData = z.infer<typeof projectCreateSchema>;
 
 export type ProjectWithRelations = Project & {
   urls: Url[];
