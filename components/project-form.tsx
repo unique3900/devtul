@@ -16,6 +16,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { useToast } from "@/hooks/use-toast";
 import { Globe, Shield, Search, Accessibility, Zap, Plus, X } from "lucide-react";
 import { projectCreateSchema, type ProjectCreateInput } from "@/app/actions/project/schema";
+import { createProject, importFromSitemap } from "@/app/actions/project";
 
 export function ProjectForm() {
   const router = useRouter();
@@ -57,15 +58,8 @@ export function ProjectForm() {
         additionalUrls: importedUrls,
       };
 
-      const response = await fetch("/api/v1/projects", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const result = await response.json();
+      // Use server action directly instead of API route
+      const result = await createProject(formData);
 
       if (result.success) {
         toast({
@@ -107,21 +101,14 @@ export function ProjectForm() {
 
     setIsImporting(true);
     try {
-      const response = await fetch("/api/v1/sitemap/import", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ sitemapUrl }),
-      });
-
-      const result = await response.json();
+      // Use server action directly instead of API route
+      const result = await importFromSitemap({ sitemapUrl });
 
       if (result.success) {
-        setImportedUrls(result.urls);
+        setImportedUrls(result.urls || []);
         toast({
           title: "Success",
-          description: `Imported ${result.urls.length} URLs from sitemap`,
+          description: `Imported ${result.urls?.length || 0} URLs from sitemap`,
         });
       } else {
         toast({

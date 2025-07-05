@@ -129,6 +129,135 @@ export async function createProject(data: unknown): Promise<ProjectCreateResult>
   }
 }
 
+export async function getProjects(searchParams?: {
+  search?: string;
+  sortBy?: 'name' | 'lastScan' | 'issues' | 'created';
+  sortOrder?: 'asc' | 'desc';
+  status?: string;
+}) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: "Authentication required" };
+    }
+
+    const { search, sortBy = 'name', sortOrder = 'asc', status } = searchParams || {};
+    const user = session.user;
+
+    // Determine access level based on user's role in organization
+    const isOwner = user.organizations?.some(org => org.role === 'Owner');
+    const organizationId = user.primaryOrganization?.id;
+
+    let whereClause: any = {};
+
+    // Access control: Owner sees all org projects, others see only their own
+    if (isOwner && organizationId) {
+      whereClause.organizationId = organizationId;
+    } else {
+      whereClause.ownerId = user.id;
+      if (organizationId) {
+        whereClause.organizationId = organizationId;
+      }
+    }
+
+    // Add search filter
+    if (search) {
+      whereClause.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { urls: { some: { url: { contains: search, mode: 'insensitive' } } } }
+      ];
+    }
+
+    // Add status filter
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+
+    // Determine sort order
+    let orderBy: any = {};
+    switch (sortBy) {
+      case 'lastScan':
+        orderBy = { lastScanAt: sortOrder };
+        break;
+      case 'issues':
+        orderBy = { totalIssues: sortOrder };
+        break;
+      case 'created':
+        orderBy = { createdAt: sortOrder };
+        break;
+      default:
+        orderBy = { name: sortOrder };
+    }
+
+    const projects = await prisma.project.findMany({
+      where: whereClause,
+      orderBy,
+      include: {
+        urls: {
+          select: {
+            url: true,
+            isActive: true,
+          },
+          take: 1, // Get primary URL
+        },
+        projectTags: {
+          include: {
+            tag: {
+              select: {
+                name: true,
+                color: true,
+              },
+            },
+          },
+        },
+        projectScanTypes: {
+          select: {
+            scanType: true,
+            isEnabled: true,
+          },
+        },
+        _count: {
+          select: {
+            urls: true,
+            scans: true,
+          },
+        },
+      },
+    });
+
+         // Transform the data for the frontend
+     const transformedProjects = projects.map(project => ({
+       id: project.id,
+       name: project.name,
+       description: project.description,
+       category: project.category,
+       url: project.urls[0]?.url || '',
+       status: (project as any).status || 'Active',
+       lastScan: (project as any).lastScanAt,
+       nextScan: (project as any).nextScanAt,
+       created: project.createdAt,
+       scores: (project as any).scores || {},
+       totalIssues: (project as any).totalIssues || 0,
+       criticalIssues: (project as any).criticalIssues || 0,
+       highIssues: (project as any).highIssues || 0,
+       mediumIssues: (project as any).mediumIssues || 0,
+       lowIssues: (project as any).lowIssues || 0,
+       tags: project.projectTags.map(pt => ({
+         name: pt.tag.name,
+         color: pt.tag.color,
+       })),
+       enabledScans: project.projectScanTypes.filter(pst => pst.isEnabled).map(pst => pst.scanType),
+       urlCount: project._count.urls,
+       scanCount: project._count.scans,
+     }));
+
+    return { success: true, projects: transformedProjects };
+  } catch (error) {
+    console.error("Error fetching projects:", error);
+    return { success: false, error: "Failed to fetch projects" };
+  }
+}
 export async function importFromSitemap(data: unknown): Promise<SitemapImportResult> {
   try {
     const validatedData = sitemapImportSchema.parse(data);

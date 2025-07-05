@@ -254,6 +254,15 @@ model Project {
   scanFrequency     ScanFrequency @default(Daily)
   complianceOptions Json?
   isActive          Boolean  @default(true)
+  lastScanAt        DateTime?
+  nextScanAt        DateTime?
+  status            ProjectStatus @default(Active)
+  totalIssues       Int      @default(0)
+  criticalIssues    Int      @default(0)
+  highIssues        Int      @default(0)
+  mediumIssues      Int      @default(0)
+  lowIssues         Int      @default(0)
+  scores            Json?    // Store latest scan scores
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   scanToken         String   @unique
@@ -271,6 +280,11 @@ model Project {
   projectScanTypes  ProjectScanType[]
   recentActivities  RecentActivity[]
   projectTags       ProjectTag[]
+  
+  @@index([organizationId])
+  @@index([ownerId])
+  @@index([lastScanAt])
+  @@index([totalIssues])
   @@map("projects")
 }
 
@@ -673,4 +687,12 @@ enum ScanFrequency {
   Weekly
   Monthly
   Manual
+}
+
+enum ProjectStatus {
+  Active
+  Scanning
+  Warning
+  Error
+  Paused
 }
