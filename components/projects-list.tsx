@@ -23,8 +23,12 @@ import {
   Settings,
   Trash2,
   ArrowUpDown,
+  UserPlus,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { Switch } from "./ui/switch";
+import { updateProjectStatus } from "@/app/actions/project";
+import { AddUserModal } from "./add-user-modal";
 
 interface Project {
   id: string;
@@ -62,12 +66,16 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
   const urlSearchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   
+  // Modal state
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
+  const [selectedProjectForUser, setSelectedProjectForUser] = useState<{id: string, name: string} | null>(null);
+
   // Local state for immediate UI feedback
   const [searchQuery, setSearchQuery] = useState(searchParams.search || "");
   const [sortBy, setSortBy] = useState(searchParams.sortBy || "name");
   const [sortOrder, setSortOrder] = useState(searchParams.sortOrder || "asc");
   const [statusFilter, setStatusFilter] = useState(searchParams.status || "all");
-  
+
   // State for projects data
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +86,7 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
     try {
       setLoading(true);
       setError(null);
-      
+
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
       if (sortBy) params.set("sortBy", sortBy);
@@ -141,7 +149,7 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
   // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams();
-    
+
     if (searchQuery) params.set("search", searchQuery);
     if (sortBy !== "name") params.set("sortBy", sortBy);
     if (sortOrder !== "asc") params.set("sortOrder", sortOrder);
@@ -200,6 +208,22 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
   const formatLastScan = (lastScan?: Date) => {
     if (!lastScan) return "Never";
     return formatDistanceToNow(new Date(lastScan), { addSuffix: true });
+  };
+
+  const handleAddUserClick = (project: Project) => {
+    setSelectedProjectForUser({ id: project.id, name: project.name });
+    setIsAddUserModalOpen(true);
+  };
+
+  const handleAddUserClose = () => {
+    setIsAddUserModalOpen(false);
+    setSelectedProjectForUser(null);
+  };
+
+  const handleAddUserSuccess = () => {
+    setIsAddUserModalOpen(false);
+    setSelectedProjectForUser(null);
+    fetchProjects();
   };
 
   return (
@@ -294,35 +318,59 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <CardTitle className="text-lg">{project.name}</CardTitle>
+                    <div className="w-full flex items-center justify-between gap-2">
+                      <CardTitle className="text-lg">{project.name}</CardTitle>
+                      <Switch 
+                        variant="gradient" 
+                        className="w-10 h-6" 
+                        size={"sm"} 
+                        checked={project.status === "Active"} 
+                        onCheckedChange={async (checked) => {
+                          const result = await updateProjectStatus(project.id, checked ? "Active" : "Paused");
+                          if(result.success){
+                            fetchProjects();
+                          }
+                        }} 
+                      />
+                    </div>
                     <CardDescription className="text-sm">
                       {project.description || project.url}
                     </CardDescription>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}`)}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}/edit`)}>
-                        <Settings className="mr-2 h-4 w-4" />
-                        Edit Project
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-red-600" 
-                        onClick={() => deleteProject(project.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleAddUserClick(project)}
+                      title="Add user to project"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}`)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/projects/${project.id}/edit`)}>
+                          <Settings className="mr-2 h-4 w-4" />
+                          Edit Project
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-600"
+                          onClick={() => deleteProject(project.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -383,7 +431,7 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
                       )}
                     </div>
                   )}
-                  
+
                   {project.enabledScans.length > 0 && (
                     <div className="flex items-center gap-1">
                       {project.enabledScans.slice(0, 4).map((scanType) => (
@@ -421,12 +469,21 @@ export function ProjectsList({ searchParams }: ProjectsListProps) {
           <Globe className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No projects found</h3>
           <p className="text-muted-foreground">
-            {searchQuery || statusFilter !== "all" 
-              ? "Try adjusting your search or filters" 
+            {searchQuery || statusFilter !== "all"
+              ? "Try adjusting your search or filters"
               : "Get started by creating your first project"}
           </p>
         </div>
       )}
+
+      {/* Add User Modal */}
+      <AddUserModal
+        isOpen={isAddUserModalOpen}
+        onClose={handleAddUserClose}
+        onSuccess={handleAddUserSuccess}
+        projectId={selectedProjectForUser?.id}
+        projectName={selectedProjectForUser?.name}
+      />
     </div>
   );
 } 

@@ -6,6 +6,7 @@ import prisma from "@/db";
 import { projectCreateSchema, sitemapImportSchema } from "./schema";
 import { ProjectCreateResult, SitemapImportResult } from "./types";
 import { revalidatePath } from "next/cache";
+import { ProjectStatus } from "@prisma/client";
 
 export async function createProject(data: unknown): Promise<ProjectCreateResult> {
   try {
@@ -244,6 +245,76 @@ export async function updateProject(projectId: string, data: unknown): Promise<P
         });
       }
     }
+
+    revalidatePath("/projects");
+    revalidatePath("/dashboard");
+
+    return { success: true, project: updatedProject as any };
+  } catch (error) {
+    console.error("Error updating project:", error);
+    return { success: false, error: "Failed to update project" };
+  }
+}
+
+export async function updateProjectStatus(projectId: string, status: string): Promise<ProjectCreateResult> {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return { success: false, error: "Authentication required" };
+    }
+
+    // Check if user has permission to update this project
+    const existingProject = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [
+          { ownerId: session.user.id },
+          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } } }
+        ]
+      }
+    });
+
+    if (!existingProject) {
+      return { success: false, error: "Project not found or access denied" };
+    }
+
+    // Update project
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: { status: status as ProjectStatus },
+      include: {
+        urls: true,
+        projectScanTypes: true,
+        projectTags: {
+          include: {
+            tag: true,
+          },
+        },
+        _count: {
+          select: {
+            urls: true,
+            scans: true,
+          },
+        },
+      },
+    });
+
+
+
+   
+      
+
+
+    // Update scan types
+    await prisma.projectScanType.deleteMany({
+      where: { projectId }
+    });
+
+
+    // Update tags
+    await prisma.projectTag.deleteMany({
+      where: { projectId }
+    });
 
     revalidatePath("/projects");
     revalidatePath("/dashboard");

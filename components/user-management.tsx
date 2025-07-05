@@ -1,29 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserPlus, Users, Mail, Calendar, Shield, AlertTriangle } from "lucide-react";
+import { UserPlus, Users, Mail, Calendar, Shield, AlertTriangle, Info, FolderOpen } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { UserInfoDialog } from "./user-info-dialog";
+import { AddUserModal } from "./add-user-modal";
 
-const userCreateSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["Admin", "Member", "Viewer"]),
-});
 
-type UserFormData = z.infer<typeof userCreateSchema>;
+
+interface Project {
+  id: string;
+  name: string;
+  role: string;
+}
 
 interface User {
   id: string;
@@ -35,29 +29,21 @@ interface User {
   lastLoginAt?: Date;
   joinedAt: Date;
   invitedAt?: Date;
+  projects?: Project[];
 }
 
 export function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isAddingUser, setIsAddingUser] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<UserFormData>({
-    resolver: zodResolver(userCreateSchema),
-    defaultValues: {
-      email: "",
-      firstName: "",
-      lastName: "",
-      role: "Member",
-    },
-  });
+  const [userRole, setUserRole] = useState<string>("");
+  
+  // User info dialog state
+  const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{id: string, email: string} | null>(null);
+  
+  // Add user modal state
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -73,6 +59,7 @@ export function UserManagement() {
 
       if (data.success) {
         setUsers(data.users || []);
+        setUserRole(data.userRole || "");
       } else {
         setError(data.error || "Failed to fetch users");
       }
@@ -88,52 +75,13 @@ export function UserManagement() {
     fetchUsers();
   }, []);
 
-  const onSubmit = async (data: UserFormData) => {
-    try {
-      setIsAddingUser(true);
-      
-      const response = await fetch("/api/v1/users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to add user");
-      }
-
-      if (result.success) {
-        toast.success(result.message || "User added successfully!");
-        if (result.user.temporaryPassword) {
-          toast.info(`Temporary password: ${result.user.temporaryPassword}`, {
-            duration: 10000,
-          });
-        }
-        reset();
-        setIsDialogOpen(false);
-        fetchUsers(); // Refresh the user list
-      } else {
-        toast.error(result.error || "Failed to add user");
-      }
-    } catch (error) {
-      console.error("Error adding user:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to add user");
-    } finally {
-      setIsAddingUser(false);
-    }
-  };
-
   const getRoleColor = (role: string) => {
     switch (role) {
       case "Owner":
         return "bg-purple-100 text-purple-800";
       case "Admin":
         return "bg-blue-100 text-blue-800";
-      case "Member":
+      case "Collaborator":
         return "bg-green-100 text-green-800";
       case "Viewer":
         return "bg-gray-100 text-gray-800";
@@ -157,116 +105,47 @@ export function UserManagement() {
     return formatDistanceToNow(new Date(date), { addSuffix: true });
   };
 
+  const handleUserInfoClick = (user: User) => {
+    setSelectedUser({ id: user.id, email: user.email });
+    setIsUserInfoOpen(true);
+  };
+
+  const handleUserInfoClose = () => {
+    setIsUserInfoOpen(false);
+    setSelectedUser(null);
+  };
+
+  const handleAddUserModalClose = () => {
+    setIsAddUserModalOpen(false);
+  };
+
+  const handleAddUserModalSuccess = () => {
+    setIsAddUserModalOpen(false);
+    fetchUsers();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">User Management</h2>
+          <h2 className="text-2xl font-bold">Team Management</h2>
           <p className="text-muted-foreground">
-            Manage users and their access to your organization
+            {userRole === 'Owner' 
+              ? "Manage all users in your organization"
+              : userRole === 'Admin'
+              ? "Manage project-specific users"
+              : "View your team members"
+            }
           </p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
-              <DialogDescription>
-                Add a new user to your organization. They will receive a temporary password.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input
-                    id="firstName"
-                    {...register("firstName")}
-                    placeholder="John"
-                  />
-                  {errors.firstName && (
-                    <p className="text-sm text-red-500">{errors.firstName.message}</p>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input
-                    id="lastName"
-                    {...register("lastName")}
-                    placeholder="Doe"
-                  />
-                  {errors.lastName && (
-                    <p className="text-sm text-red-500">{errors.lastName.message}</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  {...register("email")}
-                  placeholder="john@example.com"
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email.message}</p>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select 
-                  onValueChange={(value) => register("role").onChange({ target: { value } })}
-                  defaultValue="Member"
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="Member">Member</SelectItem>
-                    <SelectItem value="Viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.role && (
-                  <p className="text-sm text-red-500">{errors.role.message}</p>
-                )}
-              </div>
-              
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-center gap-2 text-blue-700">
-                  <Mail className="h-4 w-4" />
-                  <span className="text-sm font-medium">Temporary Password</span>
-                </div>
-                <p className="text-sm text-blue-600 mt-1">
-                  The user will be created with the temporary password: <code className="bg-blue-100 px-1 rounded">devtool123</code>
-                </p>
-              </div>
-              
-              <div className="flex gap-2 pt-4">
-                <Button type="submit" disabled={isAddingUser}>
-                  {isAddingUser ? "Adding..." : "Add User"}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsAddUserModalOpen(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add User
+          </Button>
+        </div>
+
       </div>
 
       {/* Loading State */}
@@ -295,10 +174,15 @@ export function UserManagement() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Organization Members ({users.length})
+              Team Members ({users.length})
             </CardTitle>
             <CardDescription>
-              View and manage all users in your organization
+              {userRole === 'Owner' 
+                ? "All users in your organization"
+                : userRole === 'Admin'
+                ? "Users from projects you manage"
+                : "Your team members from shared projects"
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -316,9 +200,10 @@ export function UserManagement() {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Projects</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Last Login</TableHead>
-                    <TableHead>Joined</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -344,6 +229,25 @@ export function UserManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
+                        {user.projects && user.projects.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {user.projects.slice(0, 2).map((project) => (
+                              <Badge key={project.id} variant="outline" className="text-xs">
+                                <FolderOpen className="h-3 w-3 mr-1" />
+                                {project.name}
+                              </Badge>
+                            ))}
+                            {user.projects.length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{user.projects.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No projects</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <Badge 
                           variant={user.isActive ? "default" : "secondary"}
                           className={user.isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}
@@ -354,11 +258,15 @@ export function UserManagement() {
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(user.lastLoginAt)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(user.joinedAt)}
-                        </div>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleUserInfoClick(user)}
+                          title="View user details"
+                        >
+                          <Info className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -368,6 +276,24 @@ export function UserManagement() {
           </CardContent>
         </Card>
       )}
+
+      {/* User Info Dialog */}
+      {selectedUser && (
+        <UserInfoDialog
+          isOpen={isUserInfoOpen}
+          onClose={handleUserInfoClose}
+          userId={selectedUser.id}
+          userEmail={selectedUser.email}
+        />
+      )}
+
+      {/* Add User Modal */}
+      <AddUserModal
+        isOpen={isAddUserModalOpen}
+        onClose={handleAddUserModalClose}
+        onSuccess={handleAddUserModalSuccess}
+        showProjectSelector={true}
+      />
     </div>
   );
 } 

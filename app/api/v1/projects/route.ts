@@ -27,11 +27,25 @@ export async function GET(request: NextRequest) {
 
     let whereClause: any = {};
 
-    // Access control: Owner sees all org projects, others see only their own
+    // Access control: Owner sees all org projects, others see projects they own OR are members of
     if (isOwner && organizationId) {
+      // Organization owners see all organization projects
       whereClause.organizationId = organizationId;
     } else {
-      whereClause.ownerId = user.id;
+      // Others see projects they own OR are members of
+      whereClause.OR = [
+        { ownerId: user.id }, // Projects they own
+        { 
+          members: { 
+            some: { 
+              userId: user.id,
+              isActive: true 
+            } 
+          } 
+        } // Projects they're members of
+      ];
+      
+      // Only show projects from user's organization if they have one
       if (organizationId) {
         whereClause.organizationId = organizationId;
       }
@@ -39,11 +53,24 @@ export async function GET(request: NextRequest) {
 
     // Add search filter
     if (search) {
-      whereClause.OR = [
+      const searchConditions = [
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
         { urls: { some: { url: { contains: search, mode: 'insensitive' } } } }
       ];
+      
+      // If we already have an OR clause for access control, we need to combine them
+      if (whereClause.OR) {
+        // Combine access control OR with search OR using AND
+        whereClause.AND = [
+          { OR: whereClause.OR }, // Access control
+          { OR: searchConditions } // Search conditions
+        ];
+        delete whereClause.OR; // Remove the original OR
+      } else {
+        // No existing OR, just add search conditions
+        whereClause.OR = searchConditions;
+      }
     }
 
     // Add status filter
