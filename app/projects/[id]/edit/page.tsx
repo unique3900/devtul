@@ -4,12 +4,13 @@ import Link from "next/link";
 import { EditProjectForm } from "@/components/edit-project-form";
 
 interface EditProjectPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function EditProjectPage({ params }: EditProjectPageProps) {
+export default async function EditProjectPage(props: EditProjectPageProps) {
+  const params = await props.params;
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       {/* Header */}

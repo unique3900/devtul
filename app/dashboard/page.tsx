@@ -16,81 +16,207 @@ import {
   BarChart3,
   Globe,
   Users,
+  Loader2,
 } from "lucide-react"
 import Link from "next/link"
+import { useEffect, useState } from "react"
+import { formatDistanceToNow } from "date-fns"
+
+interface DashboardStats {
+  overview: {
+    totalProjects: number
+    totalScans: number
+    totalIssues: number
+    criticalIssues: number
+    seriousIssues: number
+    moderateIssues: number
+    minorIssues: number
+    totalEstimatedTime: string
+    averageIssuesPerProject: number
+    lastScanDate: string | null
+  }
+  projects: Array<{
+    id: string
+    name: string
+    totalIssues: number
+    criticalIssues: number
+    seriousIssues: number
+    moderateIssues: number
+    minorIssues: number
+    estimatedTime: string
+    lastScan: string | null
+  }>
+}
+
+interface Project {
+  id: string
+  name: string
+  description?: string
+  status: string
+  lastScanAt?: string
+  totalIssues: number
+  criticalIssues: number
+  highIssues: number
+  mediumIssues: number
+  lowIssues: number
+  scores?: Record<string, number>
+  urls?: Array<{ url: string }>
+  urlCount: number
+}
+
+interface RecentActivity {
+  id: string
+  message: string
+  title: string
+  type: string
+  color: string
+  icon: string
+  priority: string
+  category: string
+  createdAt: string
+}
 
 export default function DashboardPage() {
-  const projects = [
-    {
-      id: 1,
-      name: "E-commerce Website",
-      url: "https://shop.example.com",
-      status: "active",
-      lastScan: "2 hours ago",
-      scores: {
-        security: 95,
-        seo: 88,
-        accessibility: 92,
-        performance: 87,
-      },
-      issues: 3,
-    },
-    {
-      id: 2,
-      name: "Corporate Blog",
-      url: "https://blog.company.com",
-      status: "scanning",
-      lastScan: "Running now",
-      scores: {
-        security: 98,
-        seo: 94,
-        accessibility: 89,
-        performance: 91,
-      },
-      issues: 1,
-    },
-    {
-      id: 3,
-      name: "Landing Page",
-      url: "https://landing.startup.com",
-      status: "warning",
-      lastScan: "1 day ago",
-      scores: {
-        security: 76,
-        seo: 82,
-        accessibility: 78,
-        performance: 84,
-      },
-      issues: 8,
-    },
-  ]
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const recentActivity = [
-    {
-      type: "security",
-      message: "Security scan completed for E-commerce Website",
-      time: "2 hours ago",
-      status: "success",
-    },
-    {
-      type: "accessibility",
-      message: "WCAG compliance issues found in Corporate Blog",
-      time: "4 hours ago",
-      status: "warning",
-    },
-    {
-      type: "seo",
-      message: "SEO optimization suggestions available for Landing Page",
-      time: "6 hours ago",
-      status: "info",
-    },
-    {
-      type: "performance",
-      message: "Performance monitoring alert for E-commerce Website",
-      time: "1 day ago",
-      status: "error",
-    },
-  ]
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Fetch dashboard stats
+      const statsResponse = await fetch('/api/v1/stats')
+      if (!statsResponse.ok) {
+        throw new Error('Failed to fetch dashboard stats')
+      }
+      const statsData = await statsResponse.json()
+      setStats(statsData)
+
+      // Fetch projects
+      const projectsResponse = await fetch('/api/v1/projects')
+      
+      if (!projectsResponse.ok) {
+        throw new Error('Failed to fetch projects')
+      }
+      const projectsData = await projectsResponse.json()
+      console.log(projectsData)
+      if (projectsData.success) {
+        setProjects(projectsData.projects || [])
+      }
+
+      // Fetch recent activity
+      try {
+        const activityResponse = await fetch('/api/v1/recent-activity')
+        if (activityResponse.ok) {
+          const activityData = await activityResponse.json()
+          setRecentActivity(activityData.activities || [])
+        }
+      } catch (err) {
+        // Recent activity is optional, don't fail if it's not available
+        console.warn('Failed to fetch recent activity:', err)
+      }
+
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-red-600 mb-2">Error loading dashboard</h3>
+          <p className="text-muted-foreground">{error}</p>
+          <Button onClick={fetchDashboardData} className="mt-4">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return <CheckCircle className="mr-1 h-3 w-3" />
+      case "scanning":
+        return <Clock className="mr-1 h-3 w-3" />
+      case "warning":
+        return <AlertTriangle className="mr-1 h-3 w-3" />
+      default:
+        return <CheckCircle className="mr-1 h-3 w-3" />
+    }
+  }
+
+  const getStatusVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return "default"
+      case "scanning":
+        return "secondary"
+      case "warning":
+        return "destructive"
+      default:
+        return "default"
+    }
+  }
+
+  const formatLastScan = (lastScan?: string) => {
+    if (!lastScan) return "Never"
+    try {
+      return formatDistanceToNow(new Date(lastScan), { addSuffix: true })
+    } catch {
+      return "Unknown"
+    }
+  }
+
+  const getActivityIcon = (type: string) => {
+    switch (type.toLowerCase()) {
+      case "security":
+        return <Shield className="h-4 w-4 text-red-600" />
+      case "accessibility":
+        return <Accessibility className="h-4 w-4 text-blue-600" />
+      case "seo":
+        return <Search className="h-4 w-4 text-green-600" />
+      case "performance":
+        return <Zap className="h-4 w-4 text-yellow-600" />
+      default:
+        return <Globe className="h-4 w-4 text-gray-600" />
+    }
+  }
+
+  const getActivityBgColor = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case "high":
+        return "bg-red-100"
+      case "medium":
+        return "bg-yellow-100"
+      case "low":
+        return "bg-green-100"
+      default:
+        return "bg-blue-100"
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -116,19 +242,23 @@ export default function DashboardPage() {
             <Globe className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground">+1 from last month</p>
+            <div className="text-2xl font-bold">{stats?.overview.totalProjects || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.overview.lastScanDate ? formatLastScan(stats.overview.lastScanDate) : "No recent scans"}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Scans</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Scans</CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1</div>
-            <p className="text-xs text-muted-foreground">Corporate Blog scanning</p>
+            <div className="text-2xl font-bold">{stats?.overview.totalScans || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {projects.filter(p => p.status === "Scanning").length} currently scanning
+            </p>
           </CardContent>
         </Card>
 
@@ -138,19 +268,23 @@ export default function DashboardPage() {
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">-3 from yesterday</p>
+            <div className="text-2xl font-bold">{stats?.overview.totalIssues || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.overview.criticalIssues || 0} critical issues
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg. Score</CardTitle>
+            <CardTitle className="text-sm font-medium">Avg. Issues</CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">88</div>
-            <p className="text-xs text-muted-foreground">+2.1% from last week</p>
+            <div className="text-2xl font-bold">{Math.round(stats?.overview.averageIssuesPerProject || 0)}</div>
+            <p className="text-xs text-muted-foreground">
+              Est. fix time: {stats?.overview.totalEstimatedTime || "N/A"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -164,85 +298,90 @@ export default function DashboardPage() {
               <CardDescription>Monitor the health and performance of your web projects</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {projects.map((project) => (
-                <div key={project.id} className="border rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold">{project.name}</h3>
-                      <p className="text-sm text-muted-foreground">{project.url}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={
-                          project.status === "active"
-                            ? "default"
-                            : project.status === "scanning"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                      >
-                        {project.status === "active" && <CheckCircle className="mr-1 h-3 w-3" />}
-                        {project.status === "scanning" && <Clock className="mr-1 h-3 w-3" />}
-                        {project.status === "warning" && <AlertTriangle className="mr-1 h-3 w-3" />}
-                        {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">{project.lastScan}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-red-600" />
-                        <span className="text-sm font-medium">Security</span>
-                      </div>
-                      <Progress value={project.scores.security} className="h-2" />
-                      <span className="text-sm text-muted-foreground">{project.scores.security}/100</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Search className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium">SEO</span>
-                      </div>
-                      <Progress value={project.scores.seo} className="h-2" />
-                      <span className="text-sm text-muted-foreground">{project.scores.seo}/100</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Accessibility className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium">A11y</span>
-                      </div>
-                      <Progress value={project.scores.accessibility} className="h-2" />
-                      <span className="text-sm text-muted-foreground">{project.scores.accessibility}/100</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-yellow-600" />
-                        <span className="text-sm font-medium">Perf</span>
-                      </div>
-                      <Progress value={project.scores.performance} className="h-2" />
-                      <span className="text-sm text-muted-foreground">{project.scores.performance}/100</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{project.issues} issues found</span>
-                    <div className="flex gap-2">
-                      <Link href={`/projects/${project.id}`}>
-                        <Button variant="outline" size="sm">
-                          View Details
-                        </Button>
-                      </Link>
-                      <Link href={`/projects/${project.id}/scan`}>
-                        <Button size="sm">Run Scan</Button>
-                      </Link>
-                    </div>
-                  </div>
+              {projects.length === 0 ? (
+                <div className="text-center py-8">
+                  <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
+                  <p className="text-muted-foreground mb-4">Get started by creating your first project</p>
+                  <Link href="/projects/new">
+                    <Button>Create Project</Button>
+                  </Link>
                 </div>
-              ))}
+              ) : (
+                projects.map((project) => (
+                  <div key={project.id} className="border rounded-lg p-4 space-y-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => window.location.href = `/results/${project.id}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold">{project.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {project.description || (project.urls && project.urls.length > 0 ? project.urls[0].url : "No URLs configured")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getStatusVariant(project.status)}>
+                          {getStatusIcon(project.status)}
+                          {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">{formatLastScan(project.lastScanAt)}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-600" />
+                          <span className="text-sm font-medium">Critical</span>
+                        </div>
+                        <div className="text-2xl font-bold text-red-600">{project.criticalIssues}</div>
+                        <span className="text-sm text-muted-foreground">Critical issues</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-orange-600" />
+                          <span className="text-sm font-medium">High</span>
+                        </div>
+                        <div className="text-2xl font-bold text-orange-600">{project.highIssues || 0}</div>
+                        <span className="text-sm text-muted-foreground">High issues</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Globe className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium">URLs</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">{project.urlCount || 0}</div>
+                        <span className="text-sm text-muted-foreground">URLs configured</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium">Health</span>
+                        </div>
+                        <div className="text-2xl font-bold text-green-600">
+                          {project.totalIssues === 0 ? "100%" : `${Math.max(0, 100 - (project.totalIssues * 5))}%`}
+                        </div>
+                        <span className="text-sm text-muted-foreground">Overall health</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">{project.totalIssues} issues found</span>
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Link href={`/results/${project.id}`}>
+                          <Button variant="outline" size="sm">
+                            View Results
+                          </Button>
+                        </Link>
+                        <Link href={`/projects/${project.id}/edit`}>
+                          <Button size="sm">Edit Project</Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>
@@ -255,30 +394,26 @@ export default function DashboardPage() {
               <CardDescription>Latest updates from your projects</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <div
-                    className={`p-2 rounded-full ${
-                      activity.status === "success"
-                        ? "bg-green-100"
-                        : activity.status === "warning"
-                          ? "bg-yellow-100"
-                          : activity.status === "error"
-                            ? "bg-red-100"
-                            : "bg-blue-100"
-                    }`}
-                  >
-                    {activity.type === "security" && <Shield className="h-4 w-4 text-red-600" />}
-                    {activity.type === "accessibility" && <Accessibility className="h-4 w-4 text-blue-600" />}
-                    {activity.type === "seo" && <Search className="h-4 w-4 text-green-600" />}
-                    {activity.type === "performance" && <Zap className="h-4 w-4 text-yellow-600" />}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
-                  </div>
+              {recentActivity.length === 0 ? (
+                <div className="text-center py-8">
+                  <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No recent activity</h3>
+                  <p className="text-muted-foreground">Activity will appear here once you start scanning projects</p>
                 </div>
-              ))}
+              ) : (
+                recentActivity.map((activity, index) => (
+                  <div key={activity.id || index} className="flex items-start gap-3">
+                    <div className={`p-2 rounded-full ${getActivityBgColor(activity.priority)}`}>
+                      {getActivityIcon(activity.type)}
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <p className="text-sm text-muted-foreground">{activity.message}</p>
+                      <p className="text-xs text-muted-foreground">{formatLastScan(activity.createdAt)}</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

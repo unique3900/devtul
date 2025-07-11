@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -42,25 +43,33 @@
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
     "@types/bcryptjs": "^3.0.0",
+    "@types/jsdom": "^21.1.7",
     "@types/jsonwebtoken": "^9.0.10",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.2",
+    "cheerio": "^1.1.0",
+    "chromium-bidi": "^0.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "latest",
     "date-fns": "4.1.0",
     "embla-carousel-react": "latest",
+    "exceljs": "^4.4.0",
     "framer-motion": "latest",
     "input-otp": "latest",
+    "jsdom": "^26.1.0",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
+    "next": "15.3.5",
     "next-auth": "^4.24.11",
     "next-themes": "latest",
-    "react": "^18",
+    "node-fetch": "^3.3.2",
+    "playwright": "^1.49.1",
+    "playwright-core": "^1.49.1",
+    "react": "19.1.0",
     "react-day-picker": "latest",
-    "react-dom": "^18",
+    "react-dom": "19.1.0",
     "react-hook-form": "^7.60.0",
     "react-resizable-panels": "latest",
     "recharts": "latest",
@@ -72,11 +81,15 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
     "postcss": "^8.5",
     "prisma": "6.11.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6"
   }
 }
