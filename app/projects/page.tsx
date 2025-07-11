@@ -4,12 +4,12 @@ import { ProjectsList } from "@/components/projects-list";
 import { ProjectsLoading } from "@/components/projects-loading";
 
 interface ProjectsPageProps {
-  searchParams: {
+  searchParams: Promise<{
     search?: string;
     sortBy?: 'name' | 'lastScan' | 'issues' | 'created';
     sortOrder?: 'asc' | 'desc';
     status?: string;
-  };
+  }>;
 }
 
 /**
@@ -28,7 +28,8 @@ interface ProjectsPageProps {
  * - Role-based access control
  * - Optimized database queries with indexing
  */
-export default function ProjectsPage({ searchParams }: ProjectsPageProps) {
+export default async function ProjectsPage(props: ProjectsPageProps) {
+  const searchParams = await props.searchParams;
   return (
     <div className="space-y-8">
       <ProjectsHeader />

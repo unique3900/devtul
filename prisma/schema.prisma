@@ -347,6 +347,11 @@ model ScanResult {
   url         String
   message     String
   element     String?
+  totalIssues Int?
+  criticalIssues Int?
+  seriousIssues Int?
+  moderateIssues Int?
+  minorIssues Int?
   severity    SeverityLevel
   impact      String?
   help        String?

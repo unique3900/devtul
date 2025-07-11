@@ -4,12 +4,13 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/db";
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -75,16 +76,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       category: project.category,
       scanFrequency: project.scanFrequency,
       url: project.urls[0]?.url || '',
-      status: (project as any).status || 'Active',
-      lastScan: (project as any).lastScanAt,
-      nextScan: (project as any).nextScanAt,
+      status: project.status || 'Active',
+      lastScan: project.lastScanAt,
+      nextScan: project.nextScanAt,
       created: project.createdAt,
-      scores: (project as any).scores || {},
-      totalIssues: (project as any).totalIssues || 0,
-      criticalIssues: (project as any).criticalIssues || 0,
-      highIssues: (project as any).highIssues || 0,
-      mediumIssues: (project as any).mediumIssues || 0,
-      lowIssues: (project as any).lowIssues || 0,
+      scores: project.scores || {},
+      totalIssues: project.totalIssues || 0,
+      criticalIssues: project.criticalIssues || 0,
+      highIssues: project.highIssues || 0,
+      mediumIssues: project.mediumIssues || 0,
+      lowIssues: project.lowIssues || 0,
       urls: project.urls,
       tags: project.projectTags.map(pt => ({
         name: pt.tag.name,
@@ -118,7 +119,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
