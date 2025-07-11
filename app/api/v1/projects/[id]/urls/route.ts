@@ -82,7 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         id: params.id,
         OR: [
           { ownerId: session.user.id },
-          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } }
+          { organization: { members: { some: { userId: session.user.id, role: { in: ['Owner', 'Admin'] } } } } }
         ]
       }
     });

@@ -136,7 +136,7 @@ export async function scanSecurity(
       url,
       message: `Security scan failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       help: 'Unable to complete security analysis due to technical issues',
-      severity: 'moderate',
+      severity: 'Medium',   
       impact: 'medium',
       tags: ['error', 'scan-failure'],
       category: 'owasp',
@@ -159,7 +159,7 @@ async function scanSecurityHeaders(url: string, response: any, page: Page): Prom
     {
       name: 'Strict-Transport-Security',
       missing: 'Missing HSTS header - site vulnerable to SSL stripping attacks',
-      severity: 'serious' as const,
+      severity: 'High' as const,
       tags: ['hsts', 'ssl', 'transport-security']
     },
     {
@@ -201,7 +201,7 @@ async function scanSecurityHeaders(url: string, response: any, page: Page): Prom
         url,
         message: header.missing,
         help: `Add ${header.name} header to improve security`,
-        severity: header.severity,
+        severity: header.severity as 'High' | 'Critical' | 'Medium' | 'Low' | 'Info',
         impact: 'medium',
         tags: ['headers', ...header.tags],
         category: 'headers',
@@ -220,7 +220,7 @@ async function scanSecurityHeaders(url: string, response: any, page: Page): Prom
         url,
         message: 'HSTS header is present but may be misconfigured',
         help: 'HSTS should include max-age and includeSubDomains directives',
-        severity: 'moderate',
+        severity: 'Medium',
         impact: 'medium',
         tags: ['headers', 'hsts', 'misconfiguration'],
         category: 'headers',
@@ -237,7 +237,7 @@ async function scanSecurityHeaders(url: string, response: any, page: Page): Prom
       url,
       message: 'Server header discloses server information',
       help: 'Remove or obfuscate server header to prevent information disclosure',
-      severity: 'minor',
+      severity: 'Low',
       impact: 'low',
       tags: ['headers', 'information-disclosure', 'server'],
       category: 'info-leak',
@@ -260,7 +260,7 @@ async function scanTLS(url: string): Promise<SecurityResult[]> {
         url,
         message: 'Site does not use HTTPS',
         help: 'Enable HTTPS to encrypt data in transit',
-        severity: 'critical',
+        severity: 'Critical',
         impact: 'high',
         tags: ['tls', 'https', 'encryption'],
         category: 'tls',
@@ -279,7 +279,7 @@ async function scanTLS(url: string): Promise<SecurityResult[]> {
         url,
         message: `Outdated TLS version detected: ${tlsInfo.version}`,
         help: 'Upgrade to TLS 1.2 or higher for better security',
-        severity: 'serious',
+        severity: 'High',
         impact: 'high',
         tags: ['tls', 'outdated', 'version'],
         category: 'tls',
@@ -295,7 +295,7 @@ async function scanTLS(url: string): Promise<SecurityResult[]> {
         url,
         message: 'SSL certificate is not trusted or invalid',
         help: 'Ensure SSL certificate is valid and trusted by major CAs',
-        severity: 'critical',
+        severity: 'Critical',
         impact: 'high',
         tags: ['tls', 'certificate', 'invalid'],
         category: 'tls',
@@ -316,7 +316,7 @@ async function scanTLS(url: string): Promise<SecurityResult[]> {
           url,
           message: `SSL certificate expires soon (${daysUntilExpiry} days)`,
           help: 'Renew SSL certificate before expiration',
-          severity: daysUntilExpiry < 7 ? 'critical' : 'serious',
+          severity: daysUntilExpiry < 7 ? 'Critical' : 'High',
           impact: 'high',
           tags: ['tls', 'certificate', 'expiring'],
           category: 'tls',
@@ -332,7 +332,7 @@ async function scanTLS(url: string): Promise<SecurityResult[]> {
       url,
       message: 'Failed to analyze TLS configuration',
       help: 'Unable to connect or analyze TLS settings',
-      severity: 'moderate',
+      severity: 'Medium',
       impact: 'medium',
       tags: ['tls', 'error'],
       category: 'tls',
@@ -356,7 +356,7 @@ async function scanCSP(url: string, response: any, page: Page): Promise<Security
       url,
       message: 'Missing Content Security Policy header',
       help: 'Implement CSP to prevent XSS and injection attacks',
-      severity: 'serious',
+      severity: 'High',
       impact: 'high',
       tags: ['csp', 'xss', 'injection'],
       category: 'csp',
@@ -371,7 +371,7 @@ async function scanCSP(url: string, response: any, page: Page): Promise<Security
         url,
         message: "CSP allows 'unsafe-inline' - vulnerable to inline script injection",
         help: "Remove 'unsafe-inline' and use nonces or hashes for inline scripts",
-        severity: 'moderate',
+        severity: 'Medium',
         impact: 'medium',
         tags: ['csp', 'unsafe-inline', 'xss'],
         category: 'csp',
@@ -386,7 +386,7 @@ async function scanCSP(url: string, response: any, page: Page): Promise<Security
         url,
         message: "CSP allows 'unsafe-eval' - vulnerable to code injection",
         help: "Remove 'unsafe-eval' to prevent dynamic code execution",
-        severity: 'moderate',
+        severity: 'Medium',
         impact: 'medium',
         tags: ['csp', 'unsafe-eval', 'injection'],
         category: 'csp',
@@ -401,7 +401,7 @@ async function scanCSP(url: string, response: any, page: Page): Promise<Security
         url,
         message: 'CSP uses wildcard (*) directive - overly permissive',
         help: 'Replace wildcards with specific domains to improve security',
-        severity: 'minor',
+        severity: 'Low',
         impact: 'low',
         tags: ['csp', 'wildcard', 'permissive'],
         category: 'csp',
@@ -437,7 +437,7 @@ async function scanCORS(url: string, response: any, page: Page): Promise<Securit
         url,
         message: 'CORS misconfiguration: wildcard origin with credentials',
         help: 'Do not use wildcard origin (*) when credentials are allowed',
-        severity: 'critical',
+        severity: 'Critical',
         impact: 'high',
         tags: ['cors', 'misconfiguration', 'credentials'],
         category: 'cors',
@@ -452,7 +452,7 @@ async function scanCORS(url: string, response: any, page: Page): Promise<Securit
         url,
         message: 'CORS allows all origins (*) - overly permissive',
         help: 'Restrict CORS to specific trusted origins',
-        severity: 'moderate',
+        severity: 'Medium',
         impact: 'medium',
         tags: ['cors', 'wildcard', 'permissive'],
         category: 'cors',
@@ -493,7 +493,7 @@ async function scanXSS(url: string, page: Page): Promise<SecurityResult[]> {
               url,
               message: 'Potential reflected XSS vulnerability detected',
               help: 'Sanitize and validate all user input to prevent XSS attacks',
-              severity: 'critical',
+              severity: 'Critical',
               impact: 'high',
               tags: ['xss', 'injection', 'reflected'],
               category: 'xss',
@@ -530,7 +530,7 @@ async function scanXSS(url: string, page: Page): Promise<SecurityResult[]> {
             url,
             message: 'Potential DOM-based XSS vulnerability detected',
             help: 'Review JavaScript code for unsafe DOM manipulation',
-            severity: 'serious',
+            severity: 'High',
             impact: 'high',
             tags: ['xss', 'dom', 'javascript'],
             category: 'xss',
@@ -593,7 +593,7 @@ async function scanInjectionVulnerabilities(url: string, page: Page): Promise<Se
               url,
               message: 'Potential SQL injection vulnerability detected',
               help: 'Use parameterized queries to prevent SQL injection',
-              severity: 'critical',
+              severity: 'Critical',
               impact: 'high',
               tags: ['sqli', 'injection', 'database'],
               category: 'injection',
@@ -644,7 +644,7 @@ async function scanAuthentication(url: string, page: Page, responses: any[]): Pr
               url: authUrl,
               message: 'Potential authentication bypass - admin panel accessible',
               help: 'Ensure proper authentication is required for administrative areas',
-              severity: 'critical',
+              severity: 'Critical',
               impact: 'high',
               tags: ['auth', 'bypass', 'admin'],
               category: 'auth',
@@ -667,7 +667,7 @@ async function scanAuthentication(url: string, page: Page, responses: any[]): Pr
             url,
             message: 'Session cookie not marked as Secure',
             help: 'Mark authentication cookies as Secure to prevent transmission over HTTP',
-            severity: 'serious',
+            severity: 'High',
             impact: 'medium',
             tags: ['auth', 'session', 'cookie', 'secure'],
             category: 'auth',
@@ -681,8 +681,8 @@ async function scanAuthentication(url: string, page: Page, responses: any[]): Pr
             id: crypto.randomUUID(),
             url,
             message: 'Session cookie not marked as HttpOnly',
-            help: 'Mark authentication cookies as HttpOnly to prevent XSS access',
-            severity: 'serious',
+            help: 'Mark authentication cookies as HttpOnly to prevent XSS access',  
+            severity: 'High',
             impact: 'medium',
             tags: ['auth', 'session', 'cookie', 'httponly'],
             category: 'auth',
@@ -731,7 +731,7 @@ async function scanInformationLeakage(url: string, page: Page, responses: any[])
               url: testUrl,
               message: 'Environment file (.env) exposed',
               help: 'Remove or restrict access to environment configuration files',
-              severity: 'critical',
+              severity: 'Critical',
               impact: 'high',
               tags: ['info-leak', 'environment', 'credentials'],
               category: 'info-leak',
@@ -745,7 +745,7 @@ async function scanInformationLeakage(url: string, page: Page, responses: any[])
               url: testUrl,
               message: 'Git repository files exposed',
               help: 'Remove .git directory from web root',
-              severity: 'serious',
+              severity: 'High',
               impact: 'medium',
               tags: ['info-leak', 'git', 'source-code'],
               category: 'info-leak',
@@ -775,7 +775,7 @@ async function scanInformationLeakage(url: string, page: Page, responses: any[])
           url,
           message: `Potential ${type} leaked in page source`,
           help: `Remove ${type} from client-side code`,
-          severity: 'serious',
+          severity: 'High',
           impact: 'high',
           tags: ['info-leak', type, 'source-code'],
           category: 'info-leak',
@@ -816,7 +816,7 @@ async function scanOWASPTop10(url: string, page: Page, responses: any[]): Promis
             url: testUrl,
             message: 'Potential directory traversal vulnerability (OWASP A01)',
             help: 'Validate and sanitize file path inputs',
-            severity: 'critical',
+            severity: 'Critical',
             impact: 'high',
             tags: ['owasp', 'a01', 'access-control', 'traversal'],
             category: 'owasp',
@@ -859,7 +859,7 @@ async function scanOWASPTop10(url: string, page: Page, responses: any[]): Promis
           url,
           message: 'Software version information disclosed (OWASP A06)',
           help: 'Hide or obfuscate software version information',
-          severity: 'minor',
+          severity: 'Low',
           impact: 'low',
           tags: ['owasp', 'a06', 'information-disclosure', 'version'],
           category: 'owasp',
@@ -922,6 +922,7 @@ function generateSecuritySummary(results: SecurityResult[]): SecuritySummary {
     serious: 0,
     moderate: 0,
     minor: 0,
+    info: 0,
     total: results.length,
     urlsAnalyzed: new Set(results.map(r => r.url)).size,
     categorySummary: {
@@ -939,8 +940,31 @@ function generateSecuritySummary(results: SecurityResult[]): SecuritySummary {
   }
 
   results.forEach(result => {
-    // Count by severity
-    summary[result.severity]++
+    // Count by severity - map database enum values to summary fields
+    switch (result.severity) {
+      case 'Critical':
+        summary.critical++
+        break
+      case 'High':
+        summary.serious++
+        break
+      case 'Medium':
+        summary.moderate++
+        break
+      case 'Low':
+        summary.minor++
+        break
+      case 'Info':
+        summary.info++
+        break
+      default:
+        // For backwards compatibility with old severity values
+        if (result.severity === 'critical') summary.critical++
+        else if (result.severity === 'serious') summary.serious++
+        else if (result.severity === 'moderate') summary.moderate++
+        else if (result.severity === 'minor') summary.minor++
+        else summary.info++
+    }
     
     // Count by category
     if (result.category in summary.categorySummary) {

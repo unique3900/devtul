@@ -8,6 +8,42 @@ export interface GetScanResultsResponse {
   totalResults: number
 }
 
+// Helper function to map frontend severity names to database enum values
+function mapSeverityToEnum(severity: string): string {
+  switch (severity.toLowerCase()) {
+    case 'critical':
+      return 'Critical'
+    case 'serious':
+      return 'High'
+    case 'moderate':
+      return 'Medium'
+    case 'minor':
+      return 'Low'
+    case 'info':
+      return 'Info'
+    default:
+      return severity.charAt(0).toUpperCase() + severity.slice(1)
+  }
+}
+
+// Helper function to map database enum values to frontend display names
+function mapEnumToDisplay(severity: string): string {
+  switch (severity) {
+    case 'Critical':
+      return 'critical'
+    case 'High':
+      return 'serious'
+    case 'Medium':
+      return 'moderate'
+    case 'Low':
+      return 'minor'
+    case 'Info':
+      return 'info'
+    default:
+      return severity.toLowerCase()
+  }
+}
+
 export async function getScanResults(
   scanId: string,
   page: number = 1,
@@ -33,10 +69,10 @@ export async function getScanResults(
       ]
     }
 
-    // Filter by severity
+    // Filter by severity - properly map frontend names to database enum values
     if (severityFilters.length > 0) {
       whereClause.severity = {
-        in: severityFilters.map(s => s.charAt(0).toUpperCase() + s.slice(1))
+        in: severityFilters.map(s => mapSeverityToEnum(s))
       }
     }
 
@@ -111,17 +147,24 @@ export async function getScanResults(
       createdAt: result.createdAt,
       updatedAt: result.updatedAt,
       scanType: result.scan?.scanType === 'Security' ? 'security' : 'wcag',
-      category: result.severity.toLowerCase()
+      category: mapEnumToDisplay(result.severity)
     }))
 
-    // Calculate summary
+    // Calculate summary from all results matching the filters (not just current page)
+    const allFilteredResults = await db.scanResult.findMany({
+      where: whereClause,
+      select: {
+        severity: true
+      }
+    })
+
     const summary: AccessibilitySummary = {
       total: totalResults,
-      critical: results.filter(r => r.severity === 'Critical').length,
-      serious: results.filter(r => r.severity === 'High').length,
-      moderate: results.filter(r => r.severity === 'Medium').length,
-      minor: results.filter(r => r.severity === 'Low').length,
-      info: results.filter(r => r.severity === 'Info').length
+      critical: allFilteredResults.filter(r => r.severity === 'Critical').length,
+      serious: allFilteredResults.filter(r => r.severity === 'High').length,
+      moderate: allFilteredResults.filter(r => r.severity === 'Medium').length,
+      minor: allFilteredResults.filter(r => r.severity === 'Low').length,
+      info: allFilteredResults.filter(r => r.severity === 'Info').length
     }
 
     return {
