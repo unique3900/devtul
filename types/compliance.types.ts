@@ -6,7 +6,7 @@ export interface AccessibilityResult {
     element: string
     elementPath?: string
     impact: string
-    severity: 'critical' | 'serious' | 'moderate' | 'minor'
+    severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Info'
     tags: string[]
     details?: Record<string, any>
     screenshotPath?: string
@@ -21,7 +21,7 @@ export interface AccessibilityResult {
     element?: string
     elementPath?: string
     impact: string
-    severity: 'critical' | 'serious' | 'moderate' | 'minor'
+    severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Info'
     tags: string[]
     category: 'headers' | 'tls' | 'csp' | 'injection' | 'auth' | 'cors' | 'xss' | 'sqli' | 'info-leak' | 'owasp'
     details?: Record<string, any>
@@ -36,6 +36,7 @@ export interface AccessibilityResult {
     serious: number
     moderate: number
     minor: number
+    info: number
     total: number
     urlsAnalyzed: number
   }
@@ -45,6 +46,7 @@ export interface AccessibilityResult {
     serious: number
     moderate: number
     minor: number
+    info: number
     total: number
     urlsAnalyzed: number
     categorySummary: {

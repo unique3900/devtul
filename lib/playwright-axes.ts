@@ -239,7 +239,7 @@ function processAxeResults(results: any, url: string): AccessibilityResult[] {
         impact: violation.impact,
         severity,
         tags: violation.tags,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
       }
     })
   })
@@ -379,15 +379,17 @@ async function performDOMAnalysis(page: Page, url: string): Promise<Accessibilit
   missingAltResults.forEach((issue, index) => {
     results.push({
       id: `missing-alt-${index}`,
+      scanId: '',
       url,
       message: 'Image is missing alt text',
       help: 'Images must have alternative text to convey their purpose to screen reader users',
       element: issue.element,
       elementPath: issue.path,
       impact: 'serious',
-      severity: 'serious',
+      severity: 'High',
       tags: ['wcag2a', 'wcag111'],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
@@ -463,15 +465,17 @@ async function performDOMAnalysis(page: Page, url: string): Promise<Accessibilit
   emptyInteractiveResults.forEach((issue, index) => {
     results.push({
       id: `empty-${issue.type}-${index}`,
+      scanId: '',
       url,
       message: `${issue.type.charAt(0).toUpperCase() + issue.type.slice(1)} has no accessible text`,
       help: `${issue.type.charAt(0).toUpperCase() + issue.type.slice(1)}s must have accessible text to convey their purpose`,
       element: issue.element,
       elementPath: issue.path,
       impact: 'serious',
-      severity: 'serious',
+      severity: 'High',
       tags: ['wcag2a', 'wcag244'],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
@@ -553,15 +557,17 @@ async function performDOMAnalysis(page: Page, url: string): Promise<Accessibilit
   headingResults.forEach((issue, index) => {
     results.push({
       id: `heading-structure-${index}`,
+      scanId: '',
       url,
       message: issue.message,
       help: 'Heading levels should not be skipped to ensure proper document structure',
       element: issue.element,
       elementPath: issue.path,
       impact: 'moderate',
-      severity: 'moderate',
+      severity: 'Medium',
       tags: ['wcag2a', 'wcag131'],
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
@@ -721,13 +727,14 @@ async function performContrastAnalysis(page: Page, url: string): Promise<Accessi
   contrastIssues.forEach((issue, index) => {
     results.push({
       id: `contrast-${index}`,
+      scanId: '',
       url,
       message: `Insufficient color contrast: ${issue.contrast.toFixed(2)}:1 (required: ${issue.required}:1)`,
       help: 'Text elements must have sufficient color contrast against their background',
       element: issue.element,
       elementPath: issue.path,
       impact: 'serious',
-      severity: 'serious',
+      severity: 'High',
       tags: ['wcag2aa', 'wcag143'],
       details: {
         textColor: issue.textColor,
@@ -737,7 +744,8 @@ async function performContrastAnalysis(page: Page, url: string): Promise<Accessi
         fontSize: issue.fontSize,
         fontWeight: issue.fontWeight
       },
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
@@ -834,19 +842,21 @@ async function performSensoryAnalysis(page: Page, url: string): Promise<Accessib
   sensoryIssues.forEach((issue, index) => {
     results.push({
       id: `sensory-${index}`,
+      scanId: '',
       url,
       message: `Content may rely on sensory characteristics: "${issue.phrase}"`,
       help: 'Instructions should not rely solely on sensory characteristics like shape, size, color, or location',
       element: issue.element,
       elementPath: issue.path,
       impact: 'moderate',
-      severity: 'moderate',
+      severity: 'Medium',
       tags: ['wcag2a', 'wcag125'],
       details: {
         text: issue.text,
         phrase: issue.phrase
       },
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
@@ -923,19 +933,21 @@ async function performSensoryAnalysis(page: Page, url: string): Promise<Accessib
   sequenceIssues.forEach((issue, index) => {
     results.push({
       id: `sequence-${index}`,
+      scanId: '',
       url,
       message: `Positioned content may disrupt reading order (${issue.position} positioning)`,
       help: 'Content should maintain a meaningful sequence when linearized',
       element: issue.element,
       elementPath: issue.path,
       impact: 'moderate',
-      severity: 'moderate',
+      severity: 'Medium',
       tags: ['wcag2a', 'wcag131'],
       details: {
         position: issue.position,
         zIndex: issue.zIndex
       },
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   })
   
