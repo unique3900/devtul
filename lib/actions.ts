@@ -168,45 +168,80 @@ export async function getAccessibilityResults(
     // Calculate total pages
     const totalPages = Math.ceil(totalResults / pageSize)
 
-    // Build orderBy clause
-    let orderBy: any = {}
-    switch (sortBy) {
-      case "severity":
-        orderBy = {
-          severity: "desc"
-        }
-        break
-      case "url":
-        orderBy = {
-          url: "asc"
-        }
-        break
-      case "date":
-        orderBy = {
-          createdAt: "desc"
-        }
-        break
-      default:
-        orderBy = {
-          createdAt: "desc"
-        }
-    }
-
-    // Get results
-    const scanResults = await db.scanResult.findMany({
-      where: whereClause,
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        scan: {
-          select: {
-            scanType: true,
-            projectId: true
+    // Get results with proper ordering
+    let scanResults: any[]
+    
+    if (sortBy === "severity") {
+      // For severity sorting, we need to fetch all filtered results and sort them in JavaScript
+      // since Prisma doesn't support custom enum ordering directly
+      const allResults = await db.scanResult.findMany({
+        where: whereClause,
+        include: {
+          scan: {
+            select: {
+              scanType: true,
+              projectId: true
+            }
           }
         }
+      })
+      
+      // Define severity order
+      const severityOrder = {
+        'Critical': 1,
+        'High': 2,
+        'Medium': 3,
+        'Low': 4,
+        'Info': 5
       }
-    })
+      
+      // Sort by severity
+      const sortedResults = allResults.sort((a, b) => {
+        const orderA = severityOrder[a.severity as keyof typeof severityOrder] || 6
+        const orderB = severityOrder[b.severity as keyof typeof severityOrder] || 6
+        return orderA - orderB
+      })
+      
+      // Apply pagination
+      const startIndex = (page - 1) * pageSize
+      const endIndex = startIndex + pageSize
+      scanResults = sortedResults.slice(startIndex, endIndex)
+    } else {
+      // Build orderBy clause for non-severity sorting
+      let orderBy: any = {}
+      switch (sortBy) {
+        case "url":
+          orderBy = {
+            url: "asc"
+          }
+          break
+        case "date":
+          orderBy = {
+            createdAt: "desc"
+          }
+          break
+        default:
+          orderBy = {
+            createdAt: "desc"
+          }
+      }
+
+      // Get results with regular Prisma query
+      scanResults = await db.scanResult.findMany({
+        where: whereClause,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          scan: {
+            select: {
+              scanType: true,
+              projectId: true
+            }
+          }
+        }
+      })
+    }
 
     // Convert to AccessibilityResult format
     const results: AccessibilityResult[] = scanResults.map(result => ({

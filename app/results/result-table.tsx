@@ -56,17 +56,30 @@ interface ResultsTableProps {
   onCategoryFilterChange: (filters: string[]) => void
 }
 
-// Function to get estimated fix time based on severity
+// Function to get estimated fix time based on severity (handles both enum and display formats)
 const getEstimatedFixTime = (severity: string): string => {
-  switch (severity.toLowerCase()) {
+  const normalizedSeverity = severity.toLowerCase();
+  
+  // Handle database enum values
+  if (normalizedSeverity === 'critical' || normalizedSeverity === 'high') {
+    return normalizedSeverity === 'critical' ? '30min' : '20min';
+  }
+  
+  // Handle frontend display values
+  switch (normalizedSeverity) {
     case 'critical':
       return '30min'
     case 'serious':
+    case 'high':
       return '20min'
     case 'moderate':
+    case 'medium':
       return '10min'
     case 'minor':
+    case 'low':
       return '5min'
+    case 'info':
+      return '2min'
     default:
       return 'N/A'
   }
@@ -107,36 +120,64 @@ export function ResultsTable({
   const [exportProgress, setExportProgress] = useState(0)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  const getSeverityColor = (severity: string) => {
+  // Function to normalize severity to enum format
+  const normalizeSeverityLabel = (severity: string): string => {
     switch (severity.toLowerCase()) {
-      case "critical":
-        return "bg-red-500 hover:bg-red-600"
-      case "serious":
-        return "bg-orange-500 hover:bg-orange-600"
-      case "moderate":
-        return "bg-yellow-500 hover:bg-yellow-600"
-      case "minor":
-        return "bg-blue-500 hover:bg-blue-600"
+      case 'critical':
+        return 'Critical'
+      case 'serious':
+      case 'high':
+        return 'High'
+      case 'moderate':
+      case 'medium':
+        return 'Medium'
+      case 'minor':
+      case 'low':
+        return 'Low'
+      case 'info':
+        return 'Info'
       default:
-        return "bg-gray-500 hover:bg-gray-600"
+        return severity
+    }
+  }
+
+  const getSeverityColor = (severity: string) => {
+    const normalizedSeverity = severity.toLowerCase();
+    
+    switch (normalizedSeverity) {
+      case "critical":
+        return "bg-red-600 hover:bg-red-700 text-white border-red-700"
+      case "serious":
+      case "high":
+        return "bg-orange-500 hover:bg-orange-600 text-white border-orange-600"
+      case "moderate":
+      case "medium":
+        return "bg-yellow-500 hover:bg-yellow-600 text-black border-yellow-600"
+      case "minor":
+      case "low":
+        return "bg-blue-500 hover:bg-blue-600 text-white border-blue-600"
+      case "info":
+        return "bg-gray-500 hover:bg-gray-600 text-white border-gray-600"
+      default:
+        return "bg-gray-500 hover:bg-gray-600 text-white border-gray-600"
     }
   }
 
   const getTagColor = (tag: string) => {
     if (tag.includes("wcag2aaa")) {
-      return "bg-purple-500 hover:bg-purple-600"
+      return "bg-purple-600 hover:bg-purple-700 border-purple-700"
     } else if (tag.includes("wcag2aa")) {
-      return "bg-green-500 hover:bg-green-600"
+      return "bg-green-600 hover:bg-green-700 border-green-700"
     } else if (tag.includes("wcag2a")) {
-      return "bg-blue-500 hover:bg-blue-600"
+      return "bg-blue-600 hover:bg-blue-700 border-blue-700"
     } else if (tag.includes("section508")) {
-      return "bg-orange-500 hover:bg-orange-600"
+      return "bg-orange-600 hover:bg-orange-700 border-orange-700"
     } else if (tag.includes("best-practice")) {
-      return "bg-teal-500 hover:bg-teal-600"
+      return "bg-teal-600 hover:bg-teal-700 border-teal-700"
     } else if (tag.includes("experimental")) {
-      return "bg-gray-500 hover:bg-gray-600"
+      return "bg-gray-600 hover:bg-gray-700 border-gray-700"
     }
-    return "bg-gray-500 hover:bg-gray-600"
+    return "bg-gray-600 hover:bg-gray-700 border-gray-700"
   }
 
   const handleExport = async (format: 'excel' | 'pdf') => {
@@ -168,7 +209,7 @@ export function ResultsTable({
 
       setExportProgress(20)
 
-      const response = await fetch(`/api/export?${queryParams.toString()}`)
+      const response = await fetch(`/api/v1/export?${queryParams.toString()}`)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || "Export failed")
@@ -354,7 +395,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
     setIssueScreenshot(null)
 
     try {
-      const response = await fetch('/api/capture-element', {
+      const response = await fetch('/api/v1/capture-element', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -400,7 +441,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             <div className="text-2xl font-bold text-black">{summary.critical}</div>
           </div>
           <div className="bg-orange-100 p-4 rounded-lg">
-            <div className="text-sm text-gray-500">Serious</div>
+            <div className="text-sm text-gray-500">High</div>
             <div className="text-2xl font-bold text-black">{summary.serious}</div>
           </div>
           <div className="bg-yellow-100 p-4 rounded-lg">
@@ -408,7 +449,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             <div className="text-2xl font-bold text-black">{summary.moderate}</div>
           </div>
           <div className="bg-blue-100 p-4 rounded-lg">
-            <div className="text-sm text-gray-500">Minor</div>
+            <div className="text-sm text-gray-500">Low</div>
             <div className="text-2xl font-bold text-black">{summary.minor}</div>
           </div>
         </div>
@@ -766,8 +807,8 @@ Tags: ${result.tags?.join(", ") || "None"}`
       {(severityFilters.length > 0 || complianceFilters.length > 0 || scanTypeFilters.length > 0 || categoryFilters.length > 0) && (
         <div className="flex flex-wrap gap-2 mb-4">
           {severityFilters.map((severity) => (
-            <Badge key={severity} variant="outline" className="flex items-center gap-1 bg-teal-400">
-              {severity}
+            <Badge key={severity} variant="outline" className="flex items-center gap-1 bg-teal-400 text-white border-teal-600">
+              {normalizeSeverityLabel(severity)}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => onSeverityFilterChange(severityFilters.filter(f => f !== severity))}
@@ -775,7 +816,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             </Badge>
           ))}
           {complianceFilters.map((compliance) => (
-            <Badge key={compliance} variant="outline" className="flex items-center gap-1 bg-indigo-400">
+            <Badge key={compliance} variant="outline" className="flex items-center gap-1 bg-indigo-400 text-white border-indigo-600">
               {compliance}
               <X
                 className="h-3 w-3 cursor-pointer"
@@ -784,7 +825,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             </Badge>
           ))}
           {scanTypeFilters.map((scanType) => (
-            <Badge key={scanType} variant="outline" className="flex items-center gap-1 bg-purple-400">
+            <Badge key={scanType} variant="outline" className="flex items-center gap-1 bg-purple-400 text-white border-purple-600">
               {scanType}
               <X
                 className="h-3 w-3 cursor-pointer"
@@ -793,7 +834,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             </Badge>
           ))}
           {categoryFilters.map((category) => (
-            <Badge key={category} variant="outline" className="flex items-center gap-1 bg-orange-400">
+            <Badge key={category} variant="outline" className="flex items-center gap-1 bg-orange-400 text-white border-orange-600">
               {category}
               <X
                 className="h-3 w-3 cursor-pointer"
@@ -805,7 +846,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
             <Button
               variant="ghost"
               size="sm"
-              className='bg-red-400'
+              className='bg-red-500 hover:bg-red-600 text-white border-red-600'
               onClick={() => {
                 onSeverityFilterChange([])
                 onComplianceFilterChange([])
@@ -897,7 +938,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="truncate max-w-[200px]" title={result.message}>
+                      <div className="max-w-[250px] font-bold" title={result.message}>
                         {result.message}
                       </div>
                       <div className="text-xs text-gray-500 mt-1 truncate" title={result.help}>
@@ -905,12 +946,14 @@ Tags: ${result.tags?.join(", ") || "None"}`
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={(result as any).scanType === 'security' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}>
+                      <Badge className={(result as any).scanType === 'security' ? 'bg-red-500 hover:bg-red-600 text-white border-red-600' : 'bg-blue-500 hover:bg-blue-600 text-white border-blue-600'}>
                         {(result as any).scanType === 'security' ? 'Security' : 'WCAG'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getSeverityColor(result.severity)}>{result.severity}</Badge>
+                      <Badge className={`${getSeverityColor(result.severity)} border font-medium`}>
+                        {normalizeSeverityLabel(result.severity)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <div className="text-sm font-medium text-blue-600 bg-blue-50 rounded-full px-3 py-1 w-fit">
@@ -927,13 +970,13 @@ Tags: ${result.tags?.join(", ") || "None"}`
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {(result as any).scanType === 'security' ? (
-                        <Badge className="bg-amber-500 hover:bg-amber-600">
+                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-amber-600">
                           {(result as any).category || 'Security'}
                         </Badge>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {result.tags?.slice(0, 2).map((tag, tagIndex) => (
-                            <Badge key={tagIndex} className={getTagColor(tag)}>
+                            <Badge key={tagIndex} className={`${getTagColor(tag)} text-white border font-medium`}>
                               {tag}
                             </Badge>
                           ))}
