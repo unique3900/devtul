@@ -170,4 +170,233 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const {
+      name,
+      description = '',
+      category = '',
+      url = '',
+      urls = [],
+      additionalUrls = [],
+      scanTypes = { accessibility: true },
+      enabledTools,
+      scanFrequency = 'Daily',
+      complianceOptions = { wcagLevel: 'aa', section508: false },
+      tags = [],
+      autoStartScan = false
+    } = body;
+
+    // Handle both old and new formats
+    const allUrls = urls.length > 0 ? urls : [url, ...additionalUrls].filter(Boolean);
+    const finalScanTypes = enabledTools || scanTypes;
+
+    // Validation
+    if (!name || !name.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Project name is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!allUrls || allUrls.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "At least one URL is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate URLs
+    for (const urlToValidate of allUrls) {
+      try {
+        new URL(urlToValidate);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: `Invalid URL: ${urlToValidate}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (!Object.values(finalScanTypes).some(Boolean)) {
+      return NextResponse.json(
+        { success: false, error: "At least one scan type must be selected" },
+        { status: 400 }
+      );
+    }
+
+    // Get user's organization
+    const userOrgMembership = await prisma.organizationMember.findFirst({
+      where: {
+        userId: session.user.id,
+        isActive: true
+      },
+      include: {
+        organization: true
+      }
+    });
+
+    const organizationId = userOrgMembership?.organizationId;
+
+    // Create project in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the project
+      const project = await tx.project.create({
+        data: {
+          name: name.trim(),
+          description: description.trim(),
+          category: category.trim(),
+          ownerId: session.user.id,
+          organizationId,
+          scanFrequency: scanFrequency as any,
+          complianceOptions,
+          status: 'Active',
+          scanToken: `scan_${Math.random().toString(36).substring(2)}${Date.now()}`
+        }
+      });
+
+      // Create URLs
+      const urlRecords = await Promise.all(
+        allUrls.map((urlToCreate: string) => 
+          tx.url.create({
+            data: {
+              url: urlToCreate.trim(),
+              projectId: project.id,
+              isActive: true
+            }
+          })
+        )
+      );
+
+      // Create scan type configurations
+      const scanTypeMapping: Record<string, string> = {
+        'accessibility': 'Accessibility',
+        'security': 'Security',
+        'seo': 'SEO',
+        'performance': 'Performance',
+        'uptime': 'Uptime',
+        'ssl': 'SSLTLS'
+      };
+
+      const scanTypeConfigs = Object.entries(finalScanTypes)
+        .filter(([_, enabled]) => enabled)
+        .map(([scanType, _]) => ({
+          projectId: project.id,
+          scanType: scanTypeMapping[scanType] as any,
+          isEnabled: true,
+          config: scanType === 'accessibility' ? complianceOptions : {}
+        }));
+
+      if (scanTypeConfigs.length > 0) {
+        await tx.projectScanType.createMany({
+          data: scanTypeConfigs
+        });
+      }
+
+      return { project, urls: urlRecords };
+    });
+
+    // Create project created activity
+    try {
+      const { createActivityWithNotifications } = await import('@/lib/notification-rules');
+      await createActivityWithNotifications(prisma, {
+        type: 'ProjectCreated',
+        organizationId: organizationId!,
+        projectId: result.project.id,
+        userId: session.user.id,
+        title: `Project "${name}" created`,
+        message: `New project "${name}" has been created with ${allUrls.length} URL${allUrls.length > 1 ? 's' : ''}`,
+        metadata: {
+          projectName: name,
+          urlCount: allUrls.length,
+          scanTypes: Object.keys(finalScanTypes).filter(key => finalScanTypes[key as keyof typeof finalScanTypes]),
+          scanFrequency,
+          tags
+        }
+      });
+    } catch (activityError) {
+      console.error('Error creating project activity:', activityError);
+      // Don't fail project creation if activity creation fails
+    }
+
+    // Start initial scans if requested
+    if (autoStartScan) {
+      try {
+        const enabledScanTypes = Object.entries(finalScanTypes)
+          .filter(([_, enabled]) => enabled)
+          .map(([type, _]) => type);
+
+        for (const urlToScan of allUrls) {
+          // Start scans for each enabled scan type
+          const enabledScanTypes = Object.entries(finalScanTypes)
+            .filter(([_, enabled]) => enabled)
+            .map(([scanType, _]) => scanType);
+
+          for (const scanType of enabledScanTypes) {
+            const scanTypeMapping: Record<string, string> = {
+              'accessibility': 'Accessibility',
+              'security': 'Security',
+              'seo': 'SEO',
+              'performance': 'Performance',
+              'uptime': 'Uptime',
+              'ssl': 'SSLTLS'
+            };
+
+            const scanResponse = await fetch(`${request.nextUrl.origin}/api/v1/scans`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Cookie': request.headers.get('Cookie') || ''
+              },
+              body: JSON.stringify({
+                projectId: result.project.id,
+                url: urlToScan,
+                scanType: scanTypeMapping[scanType] || 'Accessibility',
+                complianceOptions: scanType === 'accessibility' ? complianceOptions : {}
+              })
+            });
+
+            if (!scanResponse.ok) {
+              console.warn(`Failed to start ${scanType} scan for ${urlToScan}:`, await scanResponse.text());
+            }
+          }
+        }
+      } catch (scanError) {
+        console.error('Error starting initial scans:', scanError);
+        // Don't fail project creation if scan startup fails
+      }
+    }
+
+    // Return the created project with URLs
+    const projectWithDetails = {
+      ...result.project,
+      urls: result.urls,
+      enabledScanTypes: Object.keys(finalScanTypes).filter(key => finalScanTypes[key as keyof typeof finalScanTypes]),
+      tags
+    };
+
+    return NextResponse.json({
+      success: true,
+      message: "Project created successfully",
+      project: projectWithDetails
+    });
+
+  } catch (error) {
+    console.error("Error creating project:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to create project" },
+      { status: 500 }
+    );
+  }
 } 

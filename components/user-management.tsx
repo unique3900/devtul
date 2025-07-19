@@ -11,8 +11,6 @@ import { formatDistanceToNow } from "date-fns";
 import { UserInfoDialog } from "./user-info-dialog";
 import { AddUserModal } from "./add-user-modal";
 
-
-
 interface Project {
   id: string;
   name: string;

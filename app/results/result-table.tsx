@@ -11,7 +11,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { Download, Search, Loader2, ExternalLink, Filter, X, Code, Copy, Image, Eye } from 'lucide-react'
+import { Download, Search, Loader2, ExternalLink, Filter, X, Code, Copy, Image, Eye, Shield, Search as SearchIcon, Accessibility } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 import type { AccessibilityResult, AccessibilitySummary } from '@/lib/types'
 import {
@@ -30,7 +30,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 interface ResultsTableProps {
   results: AccessibilityResult[]
@@ -47,6 +47,13 @@ interface ResultsTableProps {
   categoryFilters: string[]
   projectId?: string
   scanId?: string
+  // Project settings to determine which filters to show
+  projectScanTypes?: {
+    accessibility?: boolean
+    security?: boolean
+    seo?: boolean
+    performance?: boolean
+  }
   onPageChange: (page: number) => void
   onSortChange: (sortBy: string) => void
   onSearchChange: (query: string) => void
@@ -100,6 +107,7 @@ export function ResultsTable({
   categoryFilters,
   projectId,
   scanId,
+  projectScanTypes = { accessibility: true }, // Default to accessibility if not provided
   onPageChange,
   onSortChange,
   onSearchChange,
@@ -164,12 +172,21 @@ export function ResultsTable({
   }
 
   const getTagColor = (tag: string) => {
-    if (tag.includes("wcag2aaa")) {
+    // Security tags
+    if (tag.includes("security") || tag.includes("owasp") || tag.includes("ssl") || tag.includes("csrf")) {
+      return "bg-red-600 hover:bg-red-700 border-red-700"
+    }
+    // SEO tags
+    else if (tag.includes("seo") || tag.includes("meta") || tag.includes("structured-data") || tag.includes("performance")) {
+      return "bg-green-600 hover:bg-green-700 border-green-700"
+    }
+    // WCAG compliance tags
+    else if (tag.includes("wcag2aaa")) {
       return "bg-purple-600 hover:bg-purple-700 border-purple-700"
     } else if (tag.includes("wcag2aa")) {
-      return "bg-green-600 hover:bg-green-700 border-green-700"
-    } else if (tag.includes("wcag2a")) {
       return "bg-blue-600 hover:bg-blue-700 border-blue-700"
+    } else if (tag.includes("wcag2a")) {
+      return "bg-indigo-600 hover:bg-indigo-700 border-indigo-700"
     } else if (tag.includes("section508")) {
       return "bg-orange-600 hover:bg-orange-700 border-orange-700"
     } else if (tag.includes("best-practice")) {
@@ -178,6 +195,121 @@ export function ResultsTable({
       return "bg-gray-600 hover:bg-gray-700 border-gray-700"
     }
     return "bg-gray-600 hover:bg-gray-700 border-gray-700"
+  }
+
+  // Function to get scan type icon
+  const getScanTypeIcon = (scanType: string) => {
+    switch (scanType.toLowerCase()) {
+      case 'security':
+        return <Shield className="h-4 w-4" />
+      case 'seo':
+        return <SearchIcon className="h-4 w-4" />
+      case 'accessibility':
+        return <Accessibility className="h-4 w-4" />
+      default:
+        return null
+    }
+  }
+
+  // Function to determine scan type from tags or category
+  const getScanTypeFromResult = (result: AccessibilityResult): string => {
+    const tags = result.tags || []
+    const category = (result as any).category?.toLowerCase() || ''
+    const scanType = (result as any).scanType?.toLowerCase() || ''
+    
+    // First check explicit scan type
+    if (scanType) {
+      return scanType
+    }
+    
+    // Then check tags and category
+    if (tags.some(tag => tag.includes('security')) || category === 'security') {
+      return 'security'
+    } else if (tags.some(tag => tag.includes('seo')) || category === 'seo') {
+      return 'seo'
+    } else if (tags.some(tag => tag.includes('wcag') || tag.includes('accessibility')) || category === 'accessibility') {
+      return 'accessibility'
+    } else if (tags.some(tag => tag.includes('performance')) || category === 'performance') {
+      return 'performance'
+    } else if (tags.some(tag => tag.includes('uptime')) || category === 'uptime') {
+      return 'uptime'
+    } else if (tags.some(tag => tag.includes('ssl') || tag.includes('tls')) || category === 'ssl') {
+      return 'ssl'
+    }
+    return 'accessibility' // default
+  }
+
+  // Function to get scan type badge color
+  const getScanTypeBadgeColor = (scanType: string) => {
+    switch (scanType.toLowerCase()) {
+      case 'accessibility':
+        return 'bg-blue-100 text-blue-800 border-blue-300'
+      case 'security':
+        return 'bg-red-100 text-red-800 border-red-300'
+      case 'seo':
+        return 'bg-green-100 text-green-800 border-green-300'
+      case 'performance':
+        return 'bg-purple-100 text-purple-800 border-purple-300'
+      case 'uptime':
+        return 'bg-orange-100 text-orange-800 border-orange-300'
+      case 'ssl':
+        return 'bg-gray-100 text-gray-800 border-gray-300'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-300'
+    }
+  }
+
+  // Get available scan types based on project settings
+  const getAvailableScanTypes = () => {
+    const availableTypes: { label: string, value: string, icon: React.ReactElement }[] = []
+    
+    if (projectScanTypes?.accessibility) {
+      availableTypes.push({
+        label: 'Accessibility',
+        value: 'accessibility',
+        icon: <Accessibility className="h-4 w-4" />
+      })
+    }
+    if (projectScanTypes?.security) {
+      availableTypes.push({
+        label: 'Security',
+        value: 'security',
+        icon: <Shield className="h-4 w-4" />
+      })
+    }
+    if (projectScanTypes?.seo) {
+      availableTypes.push({
+        label: 'SEO',
+        value: 'seo',
+        icon: <SearchIcon className="h-4 w-4" />
+      })
+    }
+    if (projectScanTypes?.performance) {
+      availableTypes.push({
+        label: 'Performance',
+        value: 'performance',
+        icon: <SearchIcon className="h-4 w-4" />
+      })
+    }
+    
+    return availableTypes
+  }
+
+  // Get available categories based on project settings and results
+  const getAvailableCategories = () => {
+    const categories = new Set<string>()
+    
+    results.forEach(result => {
+      const category = (result as any).category
+      if (category) {
+        categories.add(category)
+      }
+    })
+    
+    return Array.from(categories).map(category => ({
+      label: category.charAt(0).toUpperCase() + category.slice(1),
+      value: category
+    }))
   }
 
   const handleExport = async (format: 'excel' | 'pdf') => {
@@ -543,28 +675,20 @@ Tags: ${result.tags?.join(", ") || "None"}`
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuLabel>Filter by Scan Type</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={scanTypeFilters.includes("wcag")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...scanTypeFilters, "wcag"]
-                  : scanTypeFilters.filter(f => f !== "wcag")
-                onScanTypeFilterChange(newFilters)
-              }}
-            >
-              WCAG Accessibility
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={scanTypeFilters.includes("security")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...scanTypeFilters, "security"]
-                  : scanTypeFilters.filter(f => f !== "security")
-                onScanTypeFilterChange(newFilters)
-              }}
-            >
-              Security Scan
-            </DropdownMenuCheckboxItem>
+            {getAvailableScanTypes().map((type) => (
+              <DropdownMenuCheckboxItem
+                key={type.value}
+                checked={scanTypeFilters.includes(type.value)}
+                onCheckedChange={(checked) => {
+                  const newFilters = checked
+                    ? [...scanTypeFilters, type.value]
+                    : scanTypeFilters.filter(f => f !== type.value)
+                  onScanTypeFilterChange(newFilters)
+                }}
+              >
+                {type.icon} {type.label}
+              </DropdownMenuCheckboxItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -583,94 +707,20 @@ Tags: ${result.tags?.join(", ") || "None"}`
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("headers")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "headers"]
-                  : categoryFilters.filter(f => f !== "headers")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              Security Headers
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("tls")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "tls"]
-                  : categoryFilters.filter(f => f !== "tls")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              TLS/SSL
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("csp")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "csp"]
-                  : categoryFilters.filter(f => f !== "csp")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              Content Security Policy
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("cors")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "cors"]
-                  : categoryFilters.filter(f => f !== "cors")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              CORS
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("xss")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "xss"]
-                  : categoryFilters.filter(f => f !== "xss")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              XSS Vulnerabilities
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("auth")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "auth"]
-                  : categoryFilters.filter(f => f !== "auth")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              Authentication
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("info-leak")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "info-leak"]
-                  : categoryFilters.filter(f => f !== "info-leak")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              Information Leakage
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={categoryFilters.includes("owasp")}
-              onCheckedChange={(checked) => {
-                const newFilters = checked
-                  ? [...categoryFilters, "owasp"]
-                  : categoryFilters.filter(f => f !== "owasp")
-                onCategoryFilterChange(newFilters)
-              }}
-            >
-              OWASP Top 10
-            </DropdownMenuCheckboxItem>
+            {getAvailableCategories().map((category) => (
+              <DropdownMenuCheckboxItem
+                key={category.value}
+                checked={categoryFilters.includes(category.value)}
+                onCheckedChange={(checked) => {
+                  const newFilters = checked
+                    ? [...categoryFilters, category.value]
+                    : categoryFilters.filter(f => f !== category.value)
+                  onCategoryFilterChange(newFilters)
+                }}
+              >
+                {category.label}
+              </DropdownMenuCheckboxItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -826,7 +876,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
           ))}
           {scanTypeFilters.map((scanType) => (
             <Badge key={scanType} variant="outline" className="flex items-center gap-1 bg-purple-400 text-white border-purple-600">
-              {scanType}
+              {getScanTypeIcon(scanType)} {scanType}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => onScanTypeFilterChange(scanTypeFilters.filter(f => f !== scanType))}
@@ -913,7 +963,7 @@ Tags: ${result.tags?.join(", ") || "None"}`
                 <TableRow>
                   <TableHead>URL</TableHead>
                   <TableHead>Issue</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Scan Type</TableHead>
                   <TableHead>Severity</TableHead>
                   <TableHead className="hidden sm:table-cell">Est. Fix Time</TableHead>
                   <TableHead className="hidden md:table-cell">Element</TableHead>
@@ -946,8 +996,8 @@ Tags: ${result.tags?.join(", ") || "None"}`
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={(result as any).scanType === 'security' ? 'bg-red-500 hover:bg-red-600 text-white border-red-600' : 'bg-blue-500 hover:bg-blue-600 text-white border-blue-600'}>
-                        {(result as any).scanType === 'security' ? 'Security' : 'WCAG'}
+                      <Badge className={`${getScanTypeBadgeColor(getScanTypeFromResult(result))} border font-medium capitalize`}>
+                        {getScanTypeIcon(getScanTypeFromResult(result))} {getScanTypeFromResult(result)}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -969,19 +1019,13 @@ Tags: ${result.tags?.join(", ") || "None"}`
                       </code>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {(result as any).scanType === 'security' ? (
-                        <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-amber-600">
-                          {(result as any).category || 'Security'}
-                        </Badge>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {result.tags?.slice(0, 2).map((tag, tagIndex) => (
-                            <Badge key={tagIndex} className={`${getTagColor(tag)} text-white border font-medium`}>
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {result.tags?.slice(0, 2).map((tag, tagIndex) => (
+                          <Badge key={tagIndex} className={`${getTagColor(tag)} text-white border font-medium`}>
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2 flex-wrap">

@@ -13,6 +13,7 @@ export interface GetAccessibilityResultsParams {
   categoryFilters?: string[]
   projectId?: string
   scanId?: string
+  includeResolved?: boolean // Whether to include resolved issues
 }
 
 export interface GetAccessibilityResultsResponse {
@@ -72,7 +73,8 @@ export async function getAccessibilityResults(
     scanTypeFilters = [],
     categoryFilters = [],
     projectId,
-    scanId
+    scanId,
+    includeResolved = false
   } = params
 
   try {
@@ -122,42 +124,34 @@ export async function getAccessibilityResults(
       }
     }
 
-    // Filter by scan type
+    // Filter by scan type - use scanType field in ScanResult
     if (scanTypeFilters.length > 0) {
-      whereClause.scan = {
-        ...whereClause.scan,
-        scanType: {
-          in: scanTypeFilters.map(t => t === 'security' ? 'Security' : 'Accessibility')
+      const mappedScanTypes = scanTypeFilters.map(t => {
+        switch (t.toLowerCase()) {
+          case 'accessibility': return 'Accessibility'
+          case 'security': return 'Security'
+          case 'seo': return 'SEO'
+          case 'performance': return 'Performance'
+          case 'uptime': return 'Uptime'
+          case 'ssl': return 'SSLTLS'
+          default: return t
         }
+      })
+      whereClause.scanType = {
+        in: mappedScanTypes
       }
     }
 
-    // Filter by category (severity-based)
+    // Filter by category - use category field in ScanResult
     if (categoryFilters.length > 0) {
-      const categoryToSeverity = {
-        'headers': ['High', 'Medium'],
-        'tls': ['Critical', 'High'],
-        'csp': ['High', 'Medium'],
-        'cors': ['Medium', 'Low'],
-        'xss': ['Critical', 'High'],
-        'auth': ['Critical', 'High'],
-        'info-leak': ['Medium', 'Low'],
-        'owasp': ['Critical', 'High']
+      whereClause.category = {
+        in: categoryFilters
       }
-      
-      let categorySeverities: string[] = []
-      categoryFilters.forEach(cat => {
-        const severities = categoryToSeverity[cat as keyof typeof categoryToSeverity]
-        if (severities) {
-          categorySeverities = [...categorySeverities, ...severities]
-        }
-      })
-      
-      if (categorySeverities.length > 0) {
-        whereClause.severity = {
-          in: [...new Set(categorySeverities)]
-        }
-      }
+    }
+
+    // Filter by resolution status (exclude resolved issues by default)
+    if (!includeResolved) {
+      whereClause.isResolved = false
     }
 
     // Count total results

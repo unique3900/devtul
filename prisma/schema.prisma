@@ -36,7 +36,8 @@ model User {
   
   // Organization relations
   organizationMemberships OrganizationMember[]
-  
+  recentActivities RecentActivity[]
+  triggeredActivities RecentActivity[] @relation("ActivityUser")
   // Project relations
   ownedProjects         Project[]               @relation("ProjectOwner")
   projectMemberships    ProjectMember[]
@@ -154,19 +155,26 @@ model RecentActivity{
   organizationId String
   message String
   title String
-  type String
+  type ActivityType
   color String
   icon String
-  priority String
-  category String
-  isGlobal Boolean
+  priority ActivityPriority
+  category ActivityCategory
+  isGlobal Boolean @default(false)
+  deliveredTo User[]
   organization Organization @relation(fields: [organizationId], references: [id])
-  projectId String
-  project Project @relation(fields: [projectId], references: [id])
-  scanId String
-  scan Scan @relation(fields: [scanId], references: [id])
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id])
+  scanId String?
+  scan Scan? @relation(fields: [scanId], references: [id])
+  userId String? // User who triggered the activity
+  user User? @relation("ActivityUser", fields: [userId], references: [id])
+  notificationRules Json? // Rules for who should be notified
+  metadata Json? // Additional activity data
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("recent_activities")
 }
 
 model UserNotification {
@@ -335,6 +343,7 @@ model Scan {
   project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url             Url?         @relation(fields: [urlId], references: [id])
   results         ScanResult[]
+  resolvedIssues  ScanResult[] @relation("ResolvedIssues") // Issues resolved by this scan
   initiatedBy     User         @relation("ScanUser", fields: [initiatedById], references: [id])
   initiatedById   String
   recentActivities RecentActivity[]
@@ -358,13 +367,30 @@ model ScanResult {
   tags        String[]
   elementPath String?
   details     Json?
+  scanType    ScanType? // Added for proper scan type filtering
+  category    String?   // Added for categorizing issues (e.g., "security", "performance")
+  
+  // Issue resolution tracking
+  isResolved      Boolean   @default(false)
+  resolvedAt      DateTime?
+  resolvedInScanId String?   // Which scan resolved this issue
+  lastSeenAt      DateTime  @default(now()) // When this issue was last detected
+  firstSeenAt     DateTime  @default(now()) // When this issue was first detected
+  occurrenceCount Int       @default(1)     // How many times this issue has been detected
+  issueHash       String?   // Hash for deduplication (url + message + element + scanType)
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   // Relations
   scan        Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  resolvedInScan Scan? @relation("ResolvedIssues", fields: [resolvedInScanId], references: [id])
   
   @@index([scanId])
+  @@index([scanType])
+  @@index([category])
+  @@index([isResolved])
+  @@index([issueHash]) // For efficient deduplication
   @@map("scan_results")
 }
 
@@ -509,6 +535,8 @@ model Tag {
   
   @@map("tags")
 }
+
+
 
 model ProjectTag {
   id        String   @id @default(uuid())
@@ -700,4 +728,43 @@ enum ProjectStatus {
   Warning
   Error
   Paused
+}
+
+enum ActivityType {
+  ProjectCreated
+  ProjectUpdated
+  ProjectDeleted
+  ScanStarted
+  ScanCompleted
+  ScanFailed
+  UserAdded
+  UserRemoved
+  UserInvited
+  SecurityIssueFound
+  AccessibilityIssueFound
+  SEOIssueFound
+  System
+  Export
+  Import
+}
+
+enum ActivityPriority {
+  Low
+  Medium
+  High
+  Critical
+  Urgent
+}
+
+enum ActivityCategory {
+  Project
+  Scan
+  Security
+  Accessibility
+  SEO
+  User
+  Organization
+  System
+  Export
+  Import
 }

@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const complianceFilters = searchParams.getAll("complianceFilters")
     const scanTypeFilters = searchParams.getAll("scanTypeFilters")
     const categoryFilters = searchParams.getAll("categoryFilters")
+    const includeResolved = searchParams.get("includeResolved") === "true"
 
     const results = await getAccessibilityResults({
       page,
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
       complianceFilters,
       scanTypeFilters,
       categoryFilters,
+      includeResolved,
     })
 
     return NextResponse.json(results)

@@ -74,6 +74,23 @@ interface RecentActivity {
   priority: string
   category: string
   createdAt: string
+  projectId?: string
+  userId?: string
+  metadata?: any
+  project?: {
+    name: string
+  }
+  user?: {
+    firstName: string
+    lastName: string
+    email: string
+  }
+  // Enhanced fields from API
+  projectName?: string
+  userDisplayName?: string
+  organizationName?: string
+  isGlobal?: boolean
+  notificationRules?: any
 }
 
 export default function DashboardPage() {
@@ -110,10 +127,12 @@ export default function DashboardPage() {
 
       // Fetch recent activity
       try {
-        const activityResponse = await fetch('/api/v1/recent-activity')
+        const activityResponse = await fetch('/api/v1/recent-activities?limit=10')
         if (activityResponse.ok) {
           const activityData = await activityResponse.json()
-          setRecentActivity(activityData.activities || [])
+          if (activityData.success) {
+            setRecentActivity(activityData.activities || [])
+          }
         }
       } catch (err) {
         // Recent activity is optional, don't fail if it's not available
@@ -190,16 +209,58 @@ export default function DashboardPage() {
     }
   }
 
-  const getActivityIcon = (type: string) => {
+  const getActivityIcon = (iconName: string, type: string) => {
+    // Use the icon name from the database if available
+    const iconMap: Record<string, React.ReactElement> = {
+      'FolderPlus': <Plus className="h-4 w-4" />,
+      'FolderEdit': <Globe className="h-4 w-4" />,
+      'FolderMinus': <Globe className="h-4 w-4" />,
+      'PlayCircle': <Clock className="h-4 w-4" />,
+      'CheckCircle': <CheckCircle className="h-4 w-4" />,
+      'XCircle': <AlertTriangle className="h-4 w-4" />,
+      'UserPlus': <Users className="h-4 w-4" />,
+      'UserMinus': <Users className="h-4 w-4" />,
+      'Mail': <Globe className="h-4 w-4" />,
+      'Shield': <Shield className="h-4 w-4" />,
+      'Accessibility': <Accessibility className="h-4 w-4" />,
+      'Search': <Search className="h-4 w-4" />,
+      'Settings': <Globe className="h-4 w-4" />,
+      'Download': <Globe className="h-4 w-4" />,
+      'Upload': <Globe className="h-4 w-4" />
+    }
+
+    // Return icon by name if available, otherwise fall back to type-based icons
+    if (iconName && iconMap[iconName]) {
+      return iconMap[iconName]
+    }
+
+    // Fallback to type-based icons
     switch (type.toLowerCase()) {
       case "security":
+      case "securityissuefound":
         return <Shield className="h-4 w-4 text-red-600" />
       case "accessibility":
+      case "accessibilityissuefound":
         return <Accessibility className="h-4 w-4 text-blue-600" />
       case "seo":
+      case "seoissuefound":
         return <Search className="h-4 w-4 text-green-600" />
       case "performance":
         return <Zap className="h-4 w-4 text-yellow-600" />
+      case "project":
+      case "projectcreated":
+      case "projectupdated":
+        return <Plus className="h-4 w-4 text-blue-600" />
+      case "scan":
+      case "scanstarted":
+      case "scancompleted":
+        return <Clock className="h-4 w-4 text-green-600" />
+      case "scanfailed":
+        return <AlertTriangle className="h-4 w-4 text-red-600" />
+      case "user":
+      case "useradded":
+      case "userinvited":
+        return <Users className="h-4 w-4 text-blue-600" />
       default:
         return <Globe className="h-4 w-4 text-gray-600" />
     }
@@ -389,30 +450,133 @@ export default function DashboardPage() {
         {/* Recent Activity */}
         <div>
           <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest updates from your projects</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div>
+                <CardTitle>Recent Activity</CardTitle>
+                <CardDescription>Latest updates from your projects and scans</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchDashboardData}
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Clock className="h-4 w-4" />
+                )}
+                Refresh
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {recentActivity.length === 0 ? (
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-3/4" />
+                        <div className="h-3 bg-gray-100 rounded animate-pulse w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : recentActivity.length === 0 ? (
                 <div className="text-center py-8">
                   <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No recent activity</h3>
                   <p className="text-muted-foreground">Activity will appear here once you start scanning projects</p>
                 </div>
               ) : (
-                recentActivity.map((activity, index) => (
-                  <div key={activity.id || index} className="flex items-start gap-3">
-                    <div className={`p-2 rounded-full ${getActivityBgColor(activity.priority)}`}>
-                      {getActivityIcon(activity.type)}
+                <div className="space-y-4">
+                  {recentActivity.map((activity, index) => (
+                    <div 
+                      key={activity.id || index} 
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors hover:bg-gray-50 ${
+                        activity.priority === 'Critical' || activity.priority === 'High' ? 'border-l-4 border-l-red-500' :
+                        activity.priority === 'Medium' ? 'border-l-4 border-l-yellow-500' :
+                        'border-l-4 border-l-blue-500'
+                      }`}
+                    >
+                      <div 
+                        className={`p-2 rounded-full ${getActivityBgColor(activity.priority)}`}
+                        style={{ backgroundColor: activity.color }}
+                      >
+                        {getActivityIcon(activity.icon, activity.type)}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">{activity.title}</p>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${
+                              activity.priority === 'Critical' ? 'border-red-500 text-red-700 bg-red-50' :
+                              activity.priority === 'High' ? 'border-orange-500 text-orange-700 bg-orange-50' :
+                              activity.priority === 'Medium' ? 'border-yellow-500 text-yellow-700 bg-yellow-50' :
+                              'border-blue-500 text-blue-700 bg-blue-50'
+                            }`}
+                          >
+                            {activity.priority}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{activity.message}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{formatLastScan(activity.createdAt)}</span>
+                          {activity.projectName && (
+                            <>
+                              <span>•</span>
+                              <span className="font-medium">{activity.projectName}</span>
+                            </>
+                          )}
+                          {activity.userDisplayName && (
+                            <>
+                              <span>•</span>
+                              <span>by {activity.userDisplayName}</span>
+                            </>
+                          )}
+                          {activity.category && (
+                            <>
+                              <span>•</span>
+                              <Badge variant="secondary" className="text-xs px-1 py-0">
+                                {activity.category}
+                              </Badge>
+                            </>
+                          )}
+                        </div>
+                        {activity.metadata && (activity.metadata.issueCount || activity.metadata.severity) && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {activity.metadata.issueCount && (
+                              <span className="bg-gray-100 px-2 py-1 rounded">
+                                {activity.metadata.issueCount} issues found
+                              </span>
+                            )}
+                            {activity.metadata.severity && (
+                              <span className={`ml-2 px-2 py-1 rounded ${
+                                activity.metadata.severity === 'Critical' ? 'bg-red-100 text-red-800' :
+                                activity.metadata.severity === 'High' ? 'bg-orange-100 text-orange-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {activity.metadata.severity} severity
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium">{activity.title}</p>
-                      <p className="text-sm text-muted-foreground">{activity.message}</p>
-                      <p className="text-xs text-muted-foreground">{formatLastScan(activity.createdAt)}</p>
+                  ))}
+                  
+                  {recentActivity.length >= 10 && (
+                    <div className="text-center pt-4">
+                      <Link href="/workspace/activity">
+                        <Button variant="outline" size="sm">
+                          View All Activities
+                        </Button>
+                      </Link>
                     </div>
-                  </div>
-                ))
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

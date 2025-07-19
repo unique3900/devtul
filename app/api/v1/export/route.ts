@@ -150,12 +150,23 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    // Apply scan type filters
+    // Apply scan type filters - use proper enum mapping
     if (scanTypeFilters.length > 0) {
-      whereClause.scanType = { in: scanTypeFilters };
+      const mappedScanTypes = scanTypeFilters.map(t => {
+        switch (t.toLowerCase()) {
+          case 'accessibility': return 'Accessibility'
+          case 'security': return 'Security'
+          case 'seo': return 'SEO'
+          case 'performance': return 'Performance'
+          case 'uptime': return 'Uptime'
+          case 'ssl': return 'SSLTLS'
+          default: return t
+        }
+      })
+      whereClause.scanType = { in: mappedScanTypes };
     }
 
-    // Apply category filters (for security scans)
+    // Apply category filters
     if (categoryFilters.length > 0) {
       whereClause.category = { in: categoryFilters };
     }
@@ -396,14 +407,14 @@ async function generateExcelReport(
     { header: 'Created At', key: 'createdAt', width: 20 },
   ];
   
-  // Add all results to the sheet
+  // Add all results to the sheet with enhanced information
   results.forEach(result => {
     detailsSheet.addRow({
       project: result.scan?.project?.name || 'Unknown Project',
       url: result.url,
       id: result.id,
-      scanType: (result as any).scanType || 'wcag',
-      category: (result as any).category || 'N/A',
+      scanType: result.scanType || (result.scan?.scanType || 'Accessibility'),
+      category: result.category || 'General',
       message: result.message,
       help: result.help || 'N/A',
       element: result.element ? (result.element.length > 500 ? result.element.substring(0, 500) + '...' : result.element) : 'N/A',
@@ -411,7 +422,7 @@ async function generateExcelReport(
       severity: result.severity,
       estimatedFixTime: estimateFixTime(result),
       tags: result.tags ? result.tags.join(', ') : 'N/A',
-      createdAt: result.createdAt ? result.createdAt.toISOString() : new Date().toISOString(),
+      createdAt: result.createdAt ? new Date(result.createdAt).toLocaleString() : new Date().toLocaleString(),
     });
   });
   
@@ -419,6 +430,113 @@ async function generateExcelReport(
   const detailsHeaderRow = detailsSheet.getRow(1);
   detailsHeaderRow.font = { bold: true };
   detailsHeaderRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFE0E0E0' }
+  };
+  
+  // Create analysis worksheet
+  const analysisSheet = workbook.addWorksheet('Analysis');
+  
+  // Analyze by scan type
+  const scanTypeAnalysis = new Map();
+  const severityAnalysis = new Map();
+  const categoryAnalysis = new Map();
+  
+  results.forEach(result => {
+    const scanType = result.scanType || (result.scan?.scanType || 'Accessibility');
+    const severity = result.severity;
+    const category = result.category || 'General';
+    
+    // Scan type analysis
+    if (!scanTypeAnalysis.has(scanType)) {
+      scanTypeAnalysis.set(scanType, { scanType, count: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 });
+    }
+    const scanTypeData = scanTypeAnalysis.get(scanType);
+    scanTypeData.count++;
+    const normalizedSeverity = mapEnumToDisplay(severity);
+    if (normalizedSeverity === 'critical') scanTypeData.critical++;
+    else if (normalizedSeverity === 'serious') scanTypeData.high++;
+    else if (normalizedSeverity === 'moderate') scanTypeData.medium++;
+    else if (normalizedSeverity === 'minor') scanTypeData.low++;
+    else if (normalizedSeverity === 'info') scanTypeData.info++;
+    
+    // Severity analysis
+    if (!severityAnalysis.has(severity)) {
+      severityAnalysis.set(severity, 0);
+    }
+    severityAnalysis.set(severity, severityAnalysis.get(severity) + 1);
+    
+    // Category analysis
+    if (!categoryAnalysis.has(category)) {
+      categoryAnalysis.set(category, 0);
+    }
+    categoryAnalysis.set(category, categoryAnalysis.get(category) + 1);
+  });
+  
+  // Add analysis headers and data
+  analysisSheet.columns = [
+    { header: 'Analysis Type', key: 'type', width: 20 },
+    { header: 'Item', key: 'item', width: 20 },
+    { header: 'Count', key: 'count', width: 15 },
+    { header: 'Critical', key: 'critical', width: 15 },
+    { header: 'High', key: 'high', width: 15 },
+    { header: 'Medium', key: 'medium', width: 15 },
+    { header: 'Low', key: 'low', width: 15 },
+    { header: 'Info', key: 'info', width: 15 },
+  ];
+  
+  // Add scan type analysis
+  analysisSheet.addRow({ type: 'SCAN TYPE BREAKDOWN', item: '', count: '', critical: '', high: '', medium: '', low: '', info: '' });
+  Array.from(scanTypeAnalysis.values()).forEach(data => {
+    analysisSheet.addRow({
+      type: 'Scan Type',
+      item: data.scanType,
+      count: data.count,
+      critical: data.critical,
+      high: data.high,
+      medium: data.medium,
+      low: data.low,
+      info: data.info
+    });
+  });
+  
+  // Add severity breakdown
+  analysisSheet.addRow({ type: '', item: '', count: '', critical: '', high: '', medium: '', low: '', info: '' });
+  analysisSheet.addRow({ type: 'SEVERITY BREAKDOWN', item: '', count: '', critical: '', high: '', medium: '', low: '', info: '' });
+  Array.from(severityAnalysis.entries()).forEach(([severity, count]) => {
+    analysisSheet.addRow({
+      type: 'Severity',
+      item: severity,
+      count: count,
+      critical: '',
+      high: '',
+      medium: '',
+      low: '',
+      info: ''
+    });
+  });
+  
+  // Add category breakdown
+  analysisSheet.addRow({ type: '', item: '', count: '', critical: '', high: '', medium: '', low: '', info: '' });
+  analysisSheet.addRow({ type: 'CATEGORY BREAKDOWN', item: '', count: '', critical: '', high: '', medium: '', low: '', info: '' });
+  Array.from(categoryAnalysis.entries()).forEach(([category, count]) => {
+    analysisSheet.addRow({
+      type: 'Category',
+      item: category,
+      count: count,
+      critical: '',
+      high: '',
+      medium: '',
+      low: '',
+      info: ''
+    });
+  });
+  
+  // Style the analysis header row
+  const analysisHeaderRow = analysisSheet.getRow(1);
+  analysisHeaderRow.font = { bold: true };
+  analysisHeaderRow.fill = {
     type: 'pattern',
     pattern: 'solid',
     fgColor: { argb: 'FFE0E0E0' }

@@ -626,7 +626,16 @@ async function scanAuthentication(url: string, page: Page, responses: any[]): Pr
       '/login',
       '/auth',
       '/dashboard',
-      '/panel'
+      '/panel',
+      '/admin/dashboard',
+      '/wp-admin',
+      '/wp-login',
+      '/wp-login.php',
+      '/wp-login.php?action=register',
+      '/wp-login.php?action=lostpassword',
+      '/wp-login.php?action=resetpass',
+      '/wp-login.php?action=rp',
+      '/wp-login.php?action=lostpassword',
     ]
 
     for (const authPath of authUrls) {

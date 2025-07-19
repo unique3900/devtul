@@ -19,6 +19,8 @@ interface Project {
     totalIssues: number
     criticalIssues: number
     urls?: Array<{ url: string }>
+    enabledScans?: string[]
+    projectScanTypes?: Array<{ scanType: string, isEnabled: boolean }>
 }
 
 export default function ResultsPage() {
@@ -39,6 +41,41 @@ export default function ResultsPage() {
     const [complianceFilters, setComplianceFilters] = useState<string[]>([])
     const [scanTypeFilters, setScanTypeFilters] = useState<string[]>([])
     const [categoryFilters, setCategoryFilters] = useState<string[]>([])
+
+    // Helper function to convert project scan types to the format expected by ResultsTable
+    const getProjectScanTypes = () => {
+        if (!project?.projectScanTypes) {
+            // Fallback to enabledScans if available
+            if (project?.enabledScans) {
+                return {
+                    accessibility: project.enabledScans.includes('accessibility') || project.enabledScans.includes('Accessibility'),
+                    security: project.enabledScans.includes('security') || project.enabledScans.includes('Security'),
+                    seo: project.enabledScans.includes('seo') || project.enabledScans.includes('SEO'),
+                    performance: project.enabledScans.includes('performance') || project.enabledScans.includes('Performance')
+                }
+            }
+            return { accessibility: true } // Default fallback
+        }
+
+        const scanTypes = {
+            accessibility: false,
+            security: false,
+            seo: false,
+            performance: false
+        }
+
+        project.projectScanTypes.forEach(scanType => {
+            if (scanType.isEnabled) {
+                const type = scanType.scanType.toLowerCase()
+                if (type === 'accessibility') scanTypes.accessibility = true
+                if (type === 'security') scanTypes.security = true
+                if (type === 'seo') scanTypes.seo = true
+                if (type === 'performance') scanTypes.performance = true
+            }
+        })
+
+        return scanTypes
+    }
 
     const fetchProject = async () => {
         try {
@@ -78,7 +115,7 @@ export default function ResultsPage() {
                 scanTypeFilters.forEach(filter => params.append("scanTypeFilters", filter))
             }
             if (categoryFilters.length > 0) {
-                categoryFilters.forEach(filter => params.append("categoryFilters", filter))
+            categoryFilters.forEach(filter => params.append("categoryFilters", filter))
             }
 
             const response = await fetch(`/api/v1/results?projectId=${projectId}&${params.toString()}`)
@@ -111,24 +148,44 @@ export default function ResultsPage() {
                 throw new Error("No URLs found for this project")
             }
 
-            // Start scans for each URL
-            const scanPromises = urls.map(async (urlObj: any) => {
-                const response = await fetch('/api/v1/scans', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        projectId: projectId,
-                        url: urlObj.url,
-                        complianceOptions: { wcagLevel: 'aa' }
-                    })
-                })
+            // Get enabled scan types for this project
+            const enabledScanTypes = getProjectScanTypes()
+            const scanTypesToRun = Object.entries(enabledScanTypes)
+                .filter(([_, enabled]) => enabled)
+                .map(([scanType, _]) => scanType)
 
-                const data = await response.json()
-                if (!response.ok) {
-                    throw new Error(data.error || "Failed to start scan")
-                }
-                return data
-            })
+            if (scanTypesToRun.length === 0) {
+                throw new Error("No scan types enabled for this project")
+            }
+
+            // Start scans for each URL and each enabled scan type
+            const scanPromises = urls.flatMap((urlObj: any) => 
+                scanTypesToRun.map(async (scanType) => {
+                    const scanTypeMapping: Record<string, string> = {
+                        'accessibility': 'Accessibility',
+                        'security': 'Security',
+                        'seo': 'SEO',
+                        'performance': 'Performance'
+                    }
+
+                    const response = await fetch('/api/v1/scans', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectId: projectId,
+                            url: urlObj.url,
+                            scanType: scanTypeMapping[scanType] || 'Accessibility',
+                            complianceOptions: { wcagLevel: 'aa' }
+                        })
+                    })
+
+                    const data = await response.json()
+                    if (!response.ok) {
+                        throw new Error(data.error || "Failed to start scan")
+                    }
+                    return data
+                })
+            )
 
             await Promise.all(scanPromises)
 
@@ -280,6 +337,7 @@ export default function ResultsPage() {
                         scanTypeFilters={scanTypeFilters}
                         categoryFilters={categoryFilters}
                         projectId={projectId}
+                        projectScanTypes={getProjectScanTypes()}
                         onPageChange={setPage}
                         onSortChange={setSortBy}
                         onSearchChange={setSearchQuery}

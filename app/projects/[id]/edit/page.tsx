@@ -12,12 +12,13 @@ interface EditProjectPageProps {
 export default async function EditProjectPage(props: EditProjectPageProps) {
   const params = await props.params;
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="container mx-auto py-8 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 mb-8">
         <Link href="/projects">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
           </Button>
         </Link>
         <div>
