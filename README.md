@@ -5,7 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/unique3900/devtul)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/unique3900/devtul/releases)
-
 ---
 
 ## 📖 About
