@@ -113,7 +113,6 @@
 .rbc-date-cell.rbc-off-range-bg {
   @apply bg-gray-50;
 }
-
 .rbc-day-bg {
   @apply border-r border-b border-gray-100;
 }
@@ -202,3 +201,4 @@
 .rbc-overlay-header {
   @apply font-medium text-sm text-gray-900 mb-2;
 }
+

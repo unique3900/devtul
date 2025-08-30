@@ -137,6 +137,7 @@ export async function updateProject(projectId: string, data: unknown): Promise<P
       return { success: false, error: "Authentication required" };
     }
 
+    console.log("data", data)
     const validatedData = projectCreateSchema.parse(data);
     const { enabledTools, tags, additionalUrls, url, ...projectData } = validatedData;
 

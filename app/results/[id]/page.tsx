@@ -44,6 +44,7 @@ export default function ResultsPage() {
 
     // Helper function to convert project scan types to the format expected by ResultsTable
     const getProjectScanTypes = () => {
+        console.log("project", project)
         if (!project?.projectScanTypes) {
             // Fallback to enabledScans if available
             if (project?.enabledScans) {
