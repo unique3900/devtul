@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { analyzeAccessibility } from "@/lib/playwright-axes";
+import { analyzeAccessibility } from "@/lib/simple-accessibility";
 import { analyzeSEO } from "@/lib/html-validator";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -25,13 +25,13 @@ export async function POST(request: NextRequest) {
     // Read metadata
     const metadata = JSON.parse(await fs.readFile(metadataPath, "utf-8"));
     
-    // Analyze accessibility using Playwright Axe
+    // Analyze accessibility using simple analyzer
     const accessibilityResults = await analyzeAccessibility(url, {
       wcagLevel: "aa",
       section508: true,
       bestPractices: true,
       experimental: false,
-      captureScreenshots: true
+      captureScreenshots: false
     });
 
     // Analyze SEO
@@ -96,9 +96,16 @@ export async function POST(request: NextRequest) {
       JSON.stringify(analysisResults, null, 2)
     );
 
+    console.log("Accessibility analysis complete:", {
+      issuesCount: issues.length,
+      summary: analysisResults.summary,
+      firstIssue: issues[0]
+    });
+
     return NextResponse.json({
       success: true,
-      issues,
+      results: issues, // Changed from 'issues' to 'results' for demo compatibility
+      issues, // Keep both for backward compatibility
       summary: analysisResults.summary
     });
 

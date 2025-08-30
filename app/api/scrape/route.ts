@@ -61,22 +61,39 @@ export async function POST(request: NextRequest) {
       const responseUrl = response.url();
       const contentType = response.headers()['content-type'] || '';
       
+      // Skip data URLs and very long URLs
+      if (responseUrl.startsWith('data:') || responseUrl.length > 500) {
+        return;
+      }
+      
       try {
-        if (contentType.includes('text/css')) {
+        // Capture CSS files (including various content types and extensions)
+        if (contentType.includes('text/css') || contentType.includes('text/stylesheet') ||
+            responseUrl.endsWith('.css') || responseUrl.match(/\.css(\?|$)/) ||
+            (response.status() === 200 && responseUrl.includes('.css'))) {
           const cssContent = await response.text();
           const fileName = getFileName(responseUrl, 'css');
           resources[fileName] = Buffer.from(cssContent);
           cssUrls.push(fileName);
-        } else if (contentType.includes('javascript') || contentType.includes('application/javascript')) {
+          console.log(`Captured CSS: ${fileName} from ${responseUrl}`);
+        } 
+        // Capture JavaScript files
+        else if (contentType.includes('javascript') || contentType.includes('application/javascript') || 
+                 responseUrl.endsWith('.js') || (response.status() === 200 && responseUrl.includes('.js'))) {
           const jsContent = await response.text();
           const fileName = getFileName(responseUrl, 'js');
           resources[fileName] = Buffer.from(jsContent);
           jsUrls.push(fileName);
-        } else if (contentType.includes('image/')) {
+          console.log(`Captured JS: ${fileName} from ${responseUrl}`);
+        } 
+        // Capture images
+        else if (contentType.includes('image/') || 
+                 responseUrl.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)(\?|$)/i)) {
           const imageBuffer = await response.buffer();
           const fileName = getFileName(responseUrl, getImageExtension(contentType));
           resources[fileName] = imageBuffer;
           imageUrls.push(fileName);
+          console.log(`Captured image: ${fileName} from ${responseUrl}`);
         }
       } catch (error) {
         console.warn(`Failed to capture resource ${responseUrl}:`, error);
@@ -103,6 +120,16 @@ export async function POST(request: NextRequest) {
       });
     });
 
+    // Additional wait to capture any lazy-loaded resources
+    await page.waitForTimeout(2000);
+    
+    // Trigger any lazy loading by scrolling
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    
+    await page.waitForTimeout(1000);
+
     // Get the final HTML after all JavaScript execution
     const html = await page.content();
 
@@ -111,11 +138,19 @@ export async function POST(request: NextRequest) {
 
     // Save the main HTML file
     await fs.writeFile(path.join(downloadDir, "index.html"), inlinedHtml);
+    
+    // Also save a copy of the original HTML without inlining for AI processing
+    await fs.writeFile(path.join(downloadDir, "index_original.html"), html);
 
-    // Save all captured resources
+    // Save all captured resources with error handling
     for (const [fileName, content] of Object.entries(resources)) {
-      const resourcePath = path.join(downloadDir, fileName);
-      await fs.writeFile(resourcePath, content);
+      try {
+        const resourcePath = path.join(downloadDir, fileName);
+        await fs.writeFile(resourcePath, content);
+      } catch (error) {
+        console.warn(`Failed to save resource ${fileName}:`, error);
+        // Continue with other resources even if one fails
+      }
     }
 
     // Create a metadata file
@@ -138,11 +173,23 @@ export async function POST(request: NextRequest) {
 
     await browser.close();
 
+    console.log(`Scraping completed for ${url}`);
+    console.log(`Total resources captured: ${Object.keys(resources).length}`);
+    console.log(`CSS files: ${cssUrls.length}`, cssUrls);
+    console.log(`JS files: ${jsUrls.length}`, jsUrls);
+    console.log(`Images: ${imageUrls.length}`, imageUrls);
+    console.log(`Resources will be injected directly into HTML for better compatibility`);
+
     return NextResponse.json({
       success: true,
       scanId,
       downloadPath: downloadDir,
-      resourceCount: Object.keys(resources).length
+      resourceCount: Object.keys(resources).length,
+      resources: {
+        css: cssUrls.length,
+        js: jsUrls.length,
+        images: imageUrls.length
+      }
     });
 
   } catch (error) {
@@ -158,9 +205,19 @@ function getFileName(url: string, extension: string): string {
   try {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;
-    const fileName = path.basename(pathname) || 'index';
+    let fileName = path.basename(pathname) || 'index';
+    
+    // Clean filename - remove invalid characters and limit length
+    fileName = fileName
+      .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid Windows characters
+      .replace(/[^\w\-_.]/g, '_') // Replace non-alphanumeric characters
+      .substring(0, 50); // Limit length to 50 characters
+    
     const nameWithoutExt = path.parse(fileName).name || 'resource';
-    return `${nameWithoutExt}_${Date.now()}.${extension}`;
+    const timestamp = Date.now();
+    const shortName = nameWithoutExt.substring(0, 20); // Further limit base name
+    
+    return `${shortName}_${timestamp}.${extension}`;
   } catch {
     return `resource_${Date.now()}.${extension}`;
   }
@@ -178,38 +235,123 @@ function getImageExtension(contentType: string): string {
 async function inlineResources(html: string, resources: { [key: string]: Buffer }, baseUrl: string): Promise<string> {
   let modifiedHtml = html;
   
-  // Replace external CSS links with inline styles
+  // Collect all CSS content to inject
+  const allCssContent: string[] = [];
+  const allJsContent: string[] = [];
+  
+  // Create URL to filename mapping for images
+  const imageMapping = new Map<string, string>();
+  
+  // Process all resources
   for (const [fileName, content] of Object.entries(resources)) {
     if (fileName.endsWith('.css')) {
-      const cssContent = content.toString();
-      // Find and replace link tags that might reference this CSS
-      const linkRegex = /<link[^>]*href=['"][^'"]*['"][^>]*>/gi;
-      modifiedHtml = modifiedHtml.replace(linkRegex, (match) => {
-        if (match.includes('stylesheet')) {
-          return `<style type="text/css">\n${cssContent}\n</style>`;
-        }
-        return match;
-      });
-    }
-  }
-
-  // Update image sources to use local files
-  for (const [fileName] of Object.entries(resources)) {
-    if (fileName.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
-      const imgRegex = new RegExp(`src=['"](.*?)['"`, 'gi');
-      modifiedHtml = modifiedHtml.replace(imgRegex, (match, src) => {
+      // Collect CSS content for injection
+      let cssContent = content.toString();
+      
+      // Fix relative URLs in CSS to point to our local images
+      cssContent = cssContent.replace(/url\(['"]?([^'")\s]+)['"]?\)/gi, (match, url) => {
         try {
-          const srcUrl = new URL(src, baseUrl);
-          if (srcUrl.origin !== new URL(baseUrl).origin) {
-            return `src="./${fileName}"`;
+          if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+            return match;
           }
+          
+          const fullUrl = new URL(url, baseUrl);
+          const pathname = fullUrl.pathname;
+          const filename = pathname.split('/').pop() || '';
+          
+          // Find matching local image file
+          for (const [imgFileName] of Object.entries(resources)) {
+            if (imgFileName.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) && 
+                (imgFileName.includes(filename) || filename.includes(imgFileName.split('_')[0]))) {
+              imageMapping.set(url, imgFileName);
+              return `url("data:image/${getImageMimeType(imgFileName)};base64,${resources[imgFileName].toString('base64')}")`;
+            }
+          }
+          
+          return match;
         } catch {
-          // If URL parsing fails, keep original
+          return match;
         }
-        return match;
       });
+      
+      allCssContent.push(`/* CSS from ${fileName} */\n${cssContent}\n`);
+    } else if (fileName.endsWith('.js')) {
+      // Collect JS content for injection
+      const jsContent = content.toString();
+      allJsContent.push(`/* JS from ${fileName} */\n${jsContent}\n`);
     }
   }
+  
+  // Remove all existing CSS link tags
+  modifiedHtml = modifiedHtml.replace(/<link[^>]*rel=['"]stylesheet['"][^>]*>/gi, '');
+  
+  // Remove all existing script tags with src attributes
+  modifiedHtml = modifiedHtml.replace(/<script[^>]*src=['"][^'"]*['"][^>]*><\/script>/gi, '');
+  
+  // Inject all CSS into the head
+  if (allCssContent.length > 0) {
+    const combinedCss = allCssContent.join('\n');
+    const cssTag = `<style type="text/css">\n${combinedCss}\n</style>`;
+    
+    if (modifiedHtml.includes('</head>')) {
+      modifiedHtml = modifiedHtml.replace('</head>', `${cssTag}\n</head>`);
+    } else if (modifiedHtml.includes('<head>')) {
+      modifiedHtml = modifiedHtml.replace('<head>', `<head>\n${cssTag}`);
+    } else {
+      // If no head tag, add one
+      modifiedHtml = `<head>${cssTag}</head>${modifiedHtml}`;
+    }
+  }
+  
+  // Inject all JavaScript at the end of body
+  if (allJsContent.length > 0) {
+    const combinedJs = allJsContent.join('\n');
+    const jsTag = `<script type="text/javascript">\n${combinedJs}\n</script>`;
+    
+    if (modifiedHtml.includes('</body>')) {
+      modifiedHtml = modifiedHtml.replace('</body>', `${jsTag}\n</body>`);
+    } else {
+      // If no body tag, add at the end
+      modifiedHtml = `${modifiedHtml}\n${jsTag}`;
+    }
+  }
+  
+  // Update image sources to use base64 data URLs for better compatibility
+  const imgRegex = /<img[^>]*src=['"]([^'"]+)['"][^>]*>/gi;
+  modifiedHtml = modifiedHtml.replace(imgRegex, (match, src) => {
+    try {
+      const fullUrl = new URL(src, baseUrl);
+      const pathname = fullUrl.pathname;
+      const filename = pathname.split('/').pop() || '';
+      
+      // Find matching local file
+      for (const [fileName, content] of Object.entries(resources)) {
+        if (fileName.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i) && 
+            (fileName.includes(filename) || filename.includes(fileName.split('_')[0]))) {
+          const mimeType = getImageMimeType(fileName);
+          const base64Data = content.toString('base64');
+          return match.replace(src, `data:image/${mimeType};base64,${base64Data}`);
+        }
+      }
+      
+      return match;
+    } catch {
+      return match;
+    }
+  });
 
   return modifiedHtml;
+}
+
+function getImageMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'png': return 'png';
+    case 'jpg':
+    case 'jpeg': return 'jpeg';
+    case 'gif': return 'gif';
+    case 'svg': return 'svg+xml';
+    case 'webp': return 'webp';
+    default: return 'png';
+  }
 }

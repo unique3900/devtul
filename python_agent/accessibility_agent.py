@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup, Tag
 import argparse
 
 # Configure Gemini API
-genai.configure(api_key="AIzaSyCH5kpJdB_4cFbCbCkUzLKDhS2C6HHIxyg")
+genai.configure(api_key="")
 
 @dataclass
 class AccessibilityIssue:

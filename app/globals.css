@@ -10,19 +10,19 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: 222.2 84% 4.9%;
     --muted: 210 40% 96%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent-foreground: 222.2 84% 4.9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
@@ -38,8 +38,8 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
@@ -50,7 +50,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 217.2 91.2% 59.8%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -68,137 +68,50 @@
   }
 }
 
-/* React Big Calendar Custom Styles */
-.rbc-calendar {
-  @apply bg-white rounded-lg;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.rbc-toolbar {
-  @apply mb-4 flex flex-wrap items-center justify-between gap-2;
+::-webkit-scrollbar-track {
+  @apply bg-muted;
 }
 
-.rbc-toolbar button {
-  @apply px-3 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full;
 }
 
-.rbc-toolbar button:active,
-.rbc-toolbar button.rbc-active {
-  @apply bg-blue-600 text-white border-blue-600;
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
 }
 
-.rbc-toolbar-label {
-  @apply text-lg font-semibold text-gray-900;
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-.rbc-month-view {
-  @apply border border-gray-200 rounded-lg overflow-hidden;
+/* Focus styles for accessibility */
+.focus-visible:focus-visible {
+  @apply outline-2 outline-offset-2 outline-ring;
 }
 
-.rbc-header {
-  @apply bg-gray-50 border-b border-gray-200 py-2 px-3 text-sm font-medium text-gray-700;
+/* Custom utility classes */
+.text-gradient {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
 }
 
-.rbc-date-cell {
-  @apply text-sm text-gray-600 p-1;
+.bg-gradient-brand {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600;
 }
 
-.rbc-date-cell.rbc-off-range {
-  @apply text-gray-400;
-}
-
-.rbc-date-cell.rbc-now {
-  @apply bg-blue-50 text-blue-700 font-semibold;
-}
-
-.rbc-date-cell.rbc-off-range-bg {
-  @apply bg-gray-50;
-}
-.rbc-day-bg {
-  @apply border-r border-b border-gray-100;
-}
-
-.rbc-day-bg.rbc-off-range-bg {
-  @apply bg-gray-50;
-}
-
-.rbc-day-bg.rbc-today {
-  @apply bg-blue-50;
-}
-
-.rbc-event {
-  @apply text-xs font-medium rounded px-1 py-0.5 cursor-pointer;
-}
-
-.rbc-event:hover {
-  @apply opacity-80;
-}
-
-.rbc-event.rbc-selected {
-  @apply ring-2 ring-blue-500 ring-offset-1;
-}
-
-.rbc-show-more {
-  @apply text-xs text-blue-600 hover:text-blue-800 cursor-pointer font-medium;
-}
-
-.rbc-month-row {
-  @apply border-b border-gray-100;
-}
-
-.rbc-week-view,
-.rbc-day-view {
-  @apply border border-gray-200 rounded-lg overflow-hidden;
-}
-
-.rbc-time-header {
-  @apply border-b border-gray-200;
-}
-
-.rbc-time-content {
-  @apply border-r border-gray-200;
-}
-
-.rbc-time-gutter {
-  @apply bg-gray-50;
-}
-
-.rbc-time-slot {
-  @apply border-b border-gray-100;
-}
-
-.rbc-timeslot-group {
-  @apply border-b border-gray-200;
-}
-
-.rbc-current-time-indicator {
-  @apply bg-red-500;
-}
-
-.rbc-agenda-view {
-  @apply border border-gray-200 rounded-lg overflow-hidden;
-}
-
-.rbc-agenda-view table {
-  @apply w-full;
-}
-
-.rbc-agenda-view .rbc-agenda-date-cell {
-  @apply bg-gray-50 border-b border-gray-200 p-3 text-sm font-medium text-gray-700;
-}
-
-.rbc-agenda-view .rbc-agenda-time-cell {
-  @apply border-b border-gray-200 p-3 text-sm text-gray-600;
-}
-
-.rbc-agenda-view .rbc-agenda-event-cell {
-  @apply border-b border-gray-200 p-3 text-sm;
-}
-
-.rbc-overlay {
-  @apply bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50;
-}
-
-.rbc-overlay-header {
-  @apply font-medium text-sm text-gray-900 mb-2;
+.bg-gradient-brand-hover {
+  @apply bg-gradient-to-r from-blue-700 to-purple-700;
 }
 

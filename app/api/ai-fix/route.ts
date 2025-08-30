@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { JSDOM } from "jsdom";
+import { injectResourcesIntoHtml } from "@/lib/resource-injector";
 
 const genAI = new GoogleGenerativeAI("AIzaSyCH5kpJdB_4cFbCbCkUzLKDhS2C6HHIxyg");
 
@@ -41,9 +42,20 @@ export async function POST(request: NextRequest) {
     const downloadDir = path.join(process.cwd(), "downloads", scanId);
     const htmlPath = path.join(downloadDir, "index.html");
     
-    // Read the original HTML
-    const originalHtml = await fs.readFile(htmlPath, "utf-8");
-    const dom = new JSDOM(originalHtml);
+    // Read the original HTML (use the version without resource injection for AI processing)
+    let originalHtml;
+    try {
+      // Try to read the original HTML without resource injection first
+      originalHtml = await fs.readFile(path.join(downloadDir, "index_original.html"), "utf-8");
+    } catch {
+      // Fallback to the processed version if original doesn't exist
+      originalHtml = await fs.readFile(htmlPath, "utf-8");
+    }
+    
+    const dom = new JSDOM(originalHtml, {
+      runScripts: "outside-only", // Prevent scripts from running during DOM manipulation
+      resources: "usable"
+    });
     const document = dom.window.document;
 
     // Group issues by type for batch processing
@@ -61,9 +73,22 @@ export async function POST(request: NextRequest) {
     // Apply fixes to the DOM
     applyFixesToDOM(document, fixResults);
 
-    // Save the fixed HTML
+    // Save the fixed HTML with resource injection
     const fixedHtml = dom.serialize();
-    await fs.writeFile(path.join(downloadDir, "index_fixed.html"), fixedHtml);
+    
+    // Read metadata to get the original URL for resource injection
+    let originalUrl = '';
+    try {
+      const metadataPath = path.join(downloadDir, "metadata.json");
+      const metadata = JSON.parse(await fs.readFile(metadataPath, "utf-8"));
+      originalUrl = metadata.url;
+    } catch (error) {
+      console.warn("Could not read metadata for resource injection:", error);
+    }
+    
+    // Inject resources into the fixed HTML
+    const fixedHtmlWithResources = await injectResourcesIntoHtml(fixedHtml, downloadDir, originalUrl);
+    await fs.writeFile(path.join(downloadDir, "index_fixed.html"), fixedHtmlWithResources);
 
     // Create fix report
     const fixReport = {
@@ -170,19 +195,25 @@ ${index + 1}. Issue ID: ${issue.id}
    WCAG Rule: ${issue.wcagRule || 'N/A'}
 `).join('')}
 
-Respond in this EXACT JSON format:
+Respond ONLY with valid JSON in this EXACT format (no markdown, no extra text):
 {
   "fixes": [
     {
       "issueId": "issue_id_here",
-      "fixed": true/false,
-      "originalElement": "original HTML",
-      "fixedElement": "fixed HTML",
+      "fixed": true,
+      "originalElement": "original HTML here",
+      "fixedElement": "fixed HTML here",
       "explanation": "brief explanation of fix",
       "confidence": 85
     }
   ]
-}`;
+}
+
+IMPORTANT: 
+- Use only double quotes for JSON strings
+- Escape any quotes inside HTML attributes with \"
+- Do not include any text before or after the JSON
+- Ensure all JSON is properly formatted and valid`;
 
   // Add type-specific instructions
   switch (type) {
@@ -247,18 +278,71 @@ KEYBOARD ACCESSIBILITY RULES:
 
 function parseAIResponse(response: string, issues: AccessibilityIssue[]): FixResult[] {
   try {
-    // Extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
+    console.log("Raw AI response:", response);
     
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Clean the response and extract JSON
+    let cleanResponse = response.trim();
+    
+    // Remove markdown code blocks if present
+    cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+    
+    // Find the JSON object - look for the outermost braces
+    let startIndex = cleanResponse.indexOf('{');
+    let endIndex = -1;
+    
+    if (startIndex !== -1) {
+      let braceCount = 0;
+      for (let i = startIndex; i < cleanResponse.length; i++) {
+        if (cleanResponse[i] === '{') braceCount++;
+        if (cleanResponse[i] === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            endIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (startIndex === -1 || endIndex === -1) {
+      throw new Error("No valid JSON object found in response");
+    }
+    
+    const jsonString = cleanResponse.substring(startIndex, endIndex + 1);
+    console.log("Extracted JSON:", jsonString);
+    
+    // Fix common JSON issues and handle truncation
+    let fixedJson = jsonString
+      .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted keys
+      .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single quotes with double quotes
+      .replace(/\n/g, '\\n') // Escape newlines in strings
+      .replace(/\r/g, '\\r') // Escape carriage returns
+      .replace(/\t/g, '\\t'); // Escape tabs
+    
+    // Handle truncated JSON - if it doesn't end properly, try to fix it
+    if (!fixedJson.endsWith('}')) {
+      // Find the last complete object in the fixes array
+      const lastCompleteObjectMatch = fixedJson.lastIndexOf('"}');
+      if (lastCompleteObjectMatch !== -1) {
+        // Truncate to the last complete object and close the JSON properly
+        fixedJson = fixedJson.substring(0, lastCompleteObjectMatch + 2) + ']}';
+      } else {
+        // If no complete objects, create empty fixes array
+        fixedJson = '{"fixes":[]}';
+      }
+    }
+    
+    console.log("Fixed JSON:", fixedJson);
+    
+    const parsed = JSON.parse(fixedJson);
     
     if (!parsed.fixes || !Array.isArray(parsed.fixes)) {
-      throw new Error("Invalid response format");
+      throw new Error("Invalid response format - missing fixes array");
     }
     
     return parsed.fixes.map((fix: any) => ({
-      issueId: fix.issueId,
+      issueId: fix.issueId || '',
       fixed: Boolean(fix.fixed),
       originalElement: fix.originalElement || '',
       fixedElement: fix.fixedElement || fix.originalElement || '',
@@ -268,12 +352,15 @@ function parseAIResponse(response: string, issues: AccessibilityIssue[]): FixRes
     
   } catch (error) {
     console.error("Failed to parse AI response:", error);
+    console.error("Response was:", response);
+    
+    // Fallback: create mock fixes for each issue
     return issues.map(issue => ({
       issueId: issue.id,
       fixed: false,
       originalElement: issue.element,
       fixedElement: issue.element,
-      explanation: "Failed to parse AI response",
+      explanation: `AI parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       confidence: 0
     }));
   }
@@ -305,6 +392,22 @@ function applyFixesToDOM(document: Document, fixResults: FixResult[]): void {
       // Replace the first matching element
       if (elementsToReplace.length > 0) {
         const targetElement = elementsToReplace[0];
+        
+        // Preserve important attributes that might be needed for JavaScript functionality
+        const importantAttributes = ['id', 'class', 'data-*', 'onclick', 'onload', 'role'];
+        for (const attr of importantAttributes) {
+          if (attr === 'data-*') {
+            // Copy all data attributes
+            Array.from(targetElement.attributes).forEach(attribute => {
+              if (attribute.name.startsWith('data-') && !fixedElement.hasAttribute(attribute.name)) {
+                fixedElement.setAttribute(attribute.name, attribute.value);
+              }
+            });
+          } else if (targetElement.hasAttribute(attr) && !fixedElement.hasAttribute(attr)) {
+            fixedElement.setAttribute(attr, targetElement.getAttribute(attr) || '');
+          }
+        }
+        
         targetElement.parentNode?.replaceChild(fixedElement.cloneNode(true), targetElement);
       }
       

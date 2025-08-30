@@ -17,195 +17,189 @@ export async function GET(
     const htmlFile = version === 'fixed' ? 'index_fixed.html' : 'index.html';
     const htmlPath = path.join(downloadDir, htmlFile);
     
+    // Check if file exists
     try {
-      const htmlContent = await fs.readFile(htmlPath, "utf-8");
-      
-      // Inject preview-specific styles and scripts
-      const enhancedHtml = injectPreviewEnhancements(htmlContent, scanId, version);
-      
-      return new NextResponse(enhancedHtml, {
-        headers: {
-          'Content-Type': 'text/html',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      });
-    } catch (error) {
-      return new NextResponse("Preview not found", { status: 404 });
+      await fs.access(htmlPath);
+    } catch {
+      // If fixed version doesn't exist, fall back to original
+      if (version === 'fixed') {
+        const originalPath = path.join(downloadDir, 'index.html');
+        try {
+          await fs.access(originalPath);
+          const originalHtml = await fs.readFile(originalPath, 'utf-8');
+          return new NextResponse(originalHtml, {
+            headers: {
+              'Content-Type': 'text/html',
+              'Cache-Control': 'no-cache',
+            },
+          });
+        } catch {
+          return NextResponse.json({ error: "HTML file not found" }, { status: 404 });
+        }
+      }
+      return NextResponse.json({ error: "HTML file not found" }, { status: 404 });
     }
+    
+    // Read and serve the HTML file
+    const htmlContent = await fs.readFile(htmlPath, 'utf-8');
+    
+    // Inject base tag and remove CSP/frame restrictions
+    const baseUrl = `/downloads/${scanId}/`;
+    let modifiedHtml = htmlContent;
+    
+    // CSS is injected directly, but JavaScript files are kept as external for better execution context
+    console.log(`Processing HTML for base URL: ${baseUrl}`);
+    console.log('Using hybrid approach - CSS injected directly, JS files served externally');
+    
+    // Remove CSP and X-Frame-Options that block iframe rendering
+    modifiedHtml = modifiedHtml
+      .replace(/<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '')
+      .replace(/<meta[^>]*http-equiv=["']X-Frame-Options["'][^>]*>/gi, '')
+      .replace(/X-Frame-Options:[^\r\n]*/gi, '')
+      .replace(/Content-Security-Policy:[^\r\n]*/gi, '');
+    
+    // Add base tag if head exists
+    if (modifiedHtml.includes('<head>')) {
+      modifiedHtml = modifiedHtml.replace(
+        '<head>',
+        `<head>
+        <base href="${baseUrl}">
+        <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';">
+        <style>
+          /* Minimal CSS to ensure iframe compatibility */
+          html, body { 
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+          }
+          * { 
+            box-sizing: border-box; 
+          }
+        </style>
+        <script>
+          // Ensure page is visible after load
+          window.addEventListener('load', function() {
+            document.body.style.visibility = 'visible';
+            document.body.style.opacity = '1';
+            // Force repaint
+            document.body.offsetHeight;
+            
+            // Trigger common animation library initialization
+            setTimeout(function() {
+              // Trigger resize event to reinitialize responsive components
+              window.dispatchEvent(new Event('resize'));
+              
+              // Reinitialize common animation libraries
+              if (window.AOS) window.AOS.refresh();
+              if (window.Swiper) {
+                // Reinitialize all Swiper instances
+                document.querySelectorAll('.swiper-container, .swiper').forEach(function(el) {
+                  if (el.swiper) el.swiper.update();
+                });
+              }
+              if (window.ScrollMagic) {
+                // Refresh ScrollMagic scenes
+                if (window.controller) window.controller.update(true);
+              }
+              if (window.GSAP || window.gsap) {
+                // Refresh GSAP animations
+                if (window.ScrollTrigger) window.ScrollTrigger.refresh();
+              }
+            }, 100);
+          });
+          
+          // Also run immediately in case load event already fired
+          if (document.readyState === 'complete') {
+            document.body.style.visibility = 'visible';
+            document.body.style.opacity = '1';
+          }
+        </script>`
+      );
+    } else {
+      // If no head tag, add it
+      modifiedHtml = `<head>
+        <base href="${baseUrl}">
+        <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';">
+        <style>
+          html, body { 
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+          }
+          * { 
+            box-sizing: border-box; 
+          }
+        </style>
+        <script>
+          window.addEventListener('load', function() {
+            document.body.style.visibility = 'visible';
+            document.body.style.opacity = '1';
+            document.body.offsetHeight;
+            
+            // Trigger common animation library initialization
+            setTimeout(function() {
+              window.dispatchEvent(new Event('resize'));
+              if (window.AOS) window.AOS.refresh();
+              if (window.Swiper) {
+                document.querySelectorAll('.swiper-container, .swiper').forEach(function(el) {
+                  if (el.swiper) el.swiper.update();
+                });
+              }
+              if (window.ScrollMagic && window.controller) window.controller.update(true);
+              if ((window.GSAP || window.gsap) && window.ScrollTrigger) window.ScrollTrigger.refresh();
+              
+              // Trigger scroll events for lazy loading and scroll-based animations
+              window.dispatchEvent(new Event('scroll'));
+              
+              // Handle lazy loading libraries
+              if (window.LazyLoad) {
+                if (typeof window.LazyLoad.update === 'function') window.LazyLoad.update();
+              }
+              if (window.lozad) {
+                const observer = window.lozad();
+                observer.observe();
+              }
+              
+              // Trigger intersection observer for elements that might be in view
+              setTimeout(function() {
+                window.dispatchEvent(new Event('scroll'));
+                // Force a small scroll to trigger intersection observers
+                window.scrollBy(0, 1);
+                window.scrollBy(0, -1);
+              }, 200);
+            }, 100);
+          });
+          if (document.readyState === 'complete') {
+            document.body.style.visibility = 'visible';
+            document.body.style.opacity = '1';
+          }
+        </script>
+      </head>${modifiedHtml}`;
+    }
+    
+    console.log(`Serving ${version} HTML for scan ${scanId} with base URL: ${baseUrl}`);
+    
+    // Count resources in HTML
+    const cssLinks = (modifiedHtml.match(/<link[^>]*rel=["']stylesheet["'][^>]*>/gi) || []).length;
+    const scriptTags = (modifiedHtml.match(/<script[^>]*src=["'][^"']+["'][^>]*>/gi) || []).length;
+    const imgTags = (modifiedHtml.match(/<img[^>]*src=["'][^"']+["'][^>]*>/gi) || []).length;
+    
+    console.log(`HTML contains: ${cssLinks} CSS links, ${scriptTags} script tags, ${imgTags} images`);
+    
+    return new NextResponse(modifiedHtml, {
+      headers: {
+        'Content-Type': 'text/html',
+        'Cache-Control': 'no-cache',
+        'X-Frame-Options': 'SAMEORIGIN', // Allow iframe from same origin
+        'Content-Security-Policy': "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; frame-ancestors 'self';",
+      },
+    });
     
   } catch (error) {
     console.error("Preview error:", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to load preview" },
+      { status: 500 }
+    );
   }
-}
-
-function injectPreviewEnhancements(html: string, scanId: string, version: string): string {
-  // Add preview-specific CSS and JavaScript
-  const previewStyles = `
-    <style id="preview-enhancements">
-      /* Preview-specific styles */
-      .accessibility-highlight {
-        outline: 2px solid #ff6b6b !important;
-        outline-offset: 2px !important;
-        position: relative !important;
-      }
-      
-      .accessibility-highlight::after {
-        content: '⚠️';
-        position: absolute !important;
-        top: -10px !important;
-        right: -10px !important;
-        background: #ff6b6b !important;
-        color: white !important;
-        border-radius: 50% !important;
-        width: 20px !important;
-        height: 20px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 12px !important;
-        z-index: 10000 !important;
-      }
-      
-      .accessibility-fixed {
-        outline: 2px solid #51cf66 !important;
-        outline-offset: 2px !important;
-        position: relative !important;
-      }
-      
-      .accessibility-fixed::after {
-        content: '✓';
-        position: absolute !important;
-        top: -10px !important;
-        right: -10px !important;
-        background: #51cf66 !important;
-        color: white !important;
-        border-radius: 50% !important;
-        width: 20px !important;
-        height: 20px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 12px !important;
-        z-index: 10000 !important;
-      }
-      
-      .preview-tooltip {
-        position: absolute !important;
-        background: rgba(0, 0, 0, 0.9) !important;
-        color: white !important;
-        padding: 8px 12px !important;
-        border-radius: 4px !important;
-        font-size: 14px !important;
-        max-width: 300px !important;
-        z-index: 10001 !important;
-        pointer-events: none !important;
-        opacity: 0 !important;
-        transition: opacity 0.2s !important;
-      }
-      
-      .preview-tooltip.show {
-        opacity: 1 !important;
-      }
-      
-      /* Ensure fixed version shows improvements */
-      ${version === 'fixed' ? `
-        img:not([alt]) {
-          outline: 2px solid #51cf66 !important;
-        }
-        
-        [role="button"]:focus,
-        button:focus,
-        a:focus {
-          outline: 2px solid #4dabf7 !important;
-          outline-offset: 2px !important;
-        }
-      ` : ''}
-    </style>
-  `;
-  
-  const previewScript = `
-    <script id="preview-script">
-      (function() {
-        let tooltip = null;
-        
-        function createTooltip() {
-          tooltip = document.createElement('div');
-          tooltip.className = 'preview-tooltip';
-          document.body.appendChild(tooltip);
-        }
-        
-        function showTooltip(element, message, x, y) {
-          if (!tooltip) createTooltip();
-          tooltip.textContent = message;
-          tooltip.style.left = x + 'px';
-          tooltip.style.top = (y - 40) + 'px';
-          tooltip.classList.add('show');
-        }
-        
-        function hideTooltip() {
-          if (tooltip) {
-            tooltip.classList.remove('show');
-          }
-        }
-        
-        // Load accessibility issues for this scan
-        fetch('/api/get-issues/${scanId}')
-          .then(response => response.json())
-          .then(data => {
-            if (data.issues) {
-              highlightIssues(data.issues);
-            }
-          })
-          .catch(console.error);
-        
-        function highlightIssues(issues) {
-          issues.forEach(issue => {
-            try {
-              const elements = document.querySelectorAll(issue.elementPath || issue.element);
-              elements.forEach(element => {
-                const isFixed = '${version}' === 'fixed' && issue.fixed;
-                element.classList.add(isFixed ? 'accessibility-fixed' : 'accessibility-highlight');
-                
-                element.addEventListener('mouseenter', (e) => {
-                  const message = isFixed 
-                    ? \`✓ Fixed: \${issue.message}\`
-                    : \`⚠️ Issue: \${issue.message}\`;
-                  showTooltip(element, message, e.pageX, e.pageY);
-                });
-                
-                element.addEventListener('mouseleave', hideTooltip);
-              });
-            } catch (error) {
-              console.warn('Could not highlight element:', issue.elementPath, error);
-            }
-          });
-        }
-        
-        // Add click handler for issue details
-        document.addEventListener('click', function(e) {
-          const target = e.target;
-          if (target.classList.contains('accessibility-highlight') || 
-              target.classList.contains('accessibility-fixed')) {
-            e.preventDefault();
-            // Could open a modal with issue details
-            console.log('Clicked accessibility issue element:', target);
-          }
-        });
-        
-      })();
-    </script>
-  `;
-  
-  // Inject styles and scripts before closing head tag
-  let enhancedHtml = html;
-  
-  if (html.includes('</head>')) {
-    enhancedHtml = html.replace('</head>', previewStyles + previewScript + '</head>');
-  } else {
-    // If no head tag, add at the beginning of body
-    enhancedHtml = html.replace('<body', previewStyles + previewScript + '<body');
-  }
-  
-  return enhancedHtml;
 }

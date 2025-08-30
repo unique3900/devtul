@@ -8,6 +8,10 @@
 .yarn/install-state.gz
 bun.lockb
 
+/downloads
+/uploads
+/exports
+
 # docker volume
 /postgres-data/
 
