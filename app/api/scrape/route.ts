@@ -67,33 +67,78 @@ export async function POST(request: NextRequest) {
       }
       
       try {
+        const contentEncoding = response.headers()['content-encoding'] || '';
+        const isCompressed = contentEncoding.includes('gzip') || contentEncoding.includes('br') || contentEncoding.includes('deflate');
+        
+        // Skip compressed files that can't be properly decoded as text
+        if (isCompressed && (contentType.includes('text/css') || contentType.includes('javascript'))) {
+          console.log(`Skipping compressed resource: ${responseUrl} (encoding: ${contentEncoding})`);
+          return;
+        }
+        
         // Capture CSS files (including various content types and extensions)
         if (contentType.includes('text/css') || contentType.includes('text/stylesheet') ||
-            responseUrl.endsWith('.css') || responseUrl.match(/\.css(\?|$)/) ||
-            (response.status() === 200 && responseUrl.includes('.css'))) {
-          const cssContent = await response.text();
-          const fileName = getFileName(responseUrl, 'css');
-          resources[fileName] = Buffer.from(cssContent);
-          cssUrls.push(fileName);
-          console.log(`Captured CSS: ${fileName} from ${responseUrl}`);
+            (responseUrl.endsWith('.css') && !isCompressed) || 
+            (responseUrl.match(/\.css(\?|$)/) && !isCompressed)) {
+          try {
+            const cssContent = await response.text();
+            // Validate that it's actually CSS content, not binary
+            if (cssContent && typeof cssContent === 'string' && !isBinaryContent(cssContent)) {
+              const fileName = getFileName(responseUrl, 'css');
+              if (!resources[fileName]) { // Avoid duplicates
+                resources[fileName] = Buffer.from(cssContent, 'utf8');
+                cssUrls.push(fileName);
+                console.log(`Captured CSS: ${fileName} from ${responseUrl}`);
+              }
+            } else {
+              console.log(`Skipping invalid CSS content: ${responseUrl}`);
+            }
+          } catch (error) {
+            console.warn(`Failed to decode CSS as text: ${responseUrl}`, error);
+          }
         } 
-        // Capture JavaScript files
+        // Capture JavaScript files (including more patterns)
         else if (contentType.includes('javascript') || contentType.includes('application/javascript') || 
-                 responseUrl.endsWith('.js') || (response.status() === 200 && responseUrl.includes('.js'))) {
-          const jsContent = await response.text();
-          const fileName = getFileName(responseUrl, 'js');
-          resources[fileName] = Buffer.from(jsContent);
-          jsUrls.push(fileName);
-          console.log(`Captured JS: ${fileName} from ${responseUrl}`);
+                 contentType.includes('text/javascript') || 
+                 (responseUrl.endsWith('.js') && !isCompressed) || 
+                 (responseUrl.match(/\.js(\?|$)/) && !isCompressed)) {
+          try {
+            const jsContent = await response.text();
+            // Validate that it's actually JS content, not binary
+            if (jsContent && typeof jsContent === 'string' && !isBinaryContent(jsContent)) {
+              const fileName = getFileName(responseUrl, 'js');
+              if (!resources[fileName]) { // Avoid duplicates
+                resources[fileName] = Buffer.from(jsContent, 'utf8');
+                jsUrls.push(fileName);
+                console.log(`Captured JS: ${fileName} from ${responseUrl}`);
+              }
+            } else {
+              console.log(`Skipping invalid JS content: ${responseUrl}`);
+            }
+          } catch (error) {
+            console.warn(`Failed to decode JS as text: ${responseUrl}`, error);
+          }
         } 
-        // Capture images
+        // Capture images (including more formats)
         else if (contentType.includes('image/') || 
-                 responseUrl.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)(\?|$)/i)) {
+                 responseUrl.match(/\.(png|jpg|jpeg|gif|svg|webp|ico|bmp|tiff)(\?|$)/i)) {
           const imageBuffer = await response.buffer();
           const fileName = getFileName(responseUrl, getImageExtension(contentType));
-          resources[fileName] = imageBuffer;
-          imageUrls.push(fileName);
-          console.log(`Captured image: ${fileName} from ${responseUrl}`);
+          if (!resources[fileName]) { // Avoid duplicates
+            resources[fileName] = imageBuffer;
+            imageUrls.push(fileName);
+            console.log(`Captured image: ${fileName} from ${responseUrl}`);
+          }
+        }
+        // Capture fonts
+        else if (contentType.includes('font/') || contentType.includes('application/font') ||
+                 responseUrl.match(/\.(woff|woff2|ttf|otf|eot)(\?|$)/i)) {
+          const fontBuffer = await response.buffer();
+          const fileName = getFileName(responseUrl, 'font');
+          if (!resources[fileName]) {
+            resources[fileName] = fontBuffer;
+            console.log(`Captured font: ${fileName} from ${responseUrl}`);
+          }
         }
       } catch (error) {
         console.warn(`Failed to capture resource ${responseUrl}:`, error);
@@ -132,6 +177,10 @@ export async function POST(request: NextRequest) {
 
     // Get the final HTML after all JavaScript execution
     const html = await page.content();
+    
+    // Additional resource discovery from HTML content
+    console.log("Scanning HTML for additional resources...");
+    await discoverAdditionalResources(page, resources, cssUrls, jsUrls, imageUrls, url);
 
     // Extract and inline CSS
     const inlinedHtml = await inlineResources(html, resources, url);
@@ -341,6 +390,97 @@ async function inlineResources(html: string, resources: { [key: string]: Buffer 
   });
 
   return modifiedHtml;
+}
+
+async function discoverAdditionalResources(
+  page: any, 
+  resources: { [key: string]: Buffer }, 
+  cssUrls: string[], 
+  jsUrls: string[], 
+  imageUrls: string[], 
+  baseUrl: string
+) {
+  try {
+    // Get all link tags for stylesheets
+    const stylesheets = await page.$$eval('link[rel="stylesheet"]', (links: any[]) => 
+      links.map(link => link.href).filter(href => href)
+    );
+    
+    // Get all script tags with src
+    const scripts = await page.$$eval('script[src]', (scripts: any[]) => 
+      scripts.map(script => script.src).filter(src => src)
+    );
+    
+    // Get all img tags
+    const images = await page.$$eval('img[src]', (imgs: any[]) => 
+      imgs.map(img => img.src).filter(src => src && !src.startsWith('data:'))
+    );
+    
+    // Fetch missing stylesheets
+    for (const href of stylesheets) {
+      try {
+        const fileName = getFileName(href, 'css');
+        if (!resources[fileName]) {
+          const response = await page.goto(href, { waitUntil: 'networkidle0', timeout: 10000 });
+          if (response && response.ok()) {
+            const cssContent = await response.text();
+            resources[fileName] = Buffer.from(cssContent);
+            cssUrls.push(fileName);
+            console.log(`Additional CSS captured: ${fileName}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to capture additional CSS ${href}:`, error);
+      }
+    }
+    
+    // Fetch missing scripts
+    for (const src of scripts) {
+      try {
+        const fileName = getFileName(src, 'js');
+        if (!resources[fileName]) {
+          const response = await page.goto(src, { waitUntil: 'networkidle0', timeout: 10000 });
+          if (response && response.ok()) {
+            const jsContent = await response.text();
+            resources[fileName] = Buffer.from(jsContent);
+            jsUrls.push(fileName);
+            console.log(`Additional JS captured: ${fileName}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to capture additional JS ${src}:`, error);
+      }
+    }
+    
+    // Return to original page
+    await page.goto(baseUrl, { waitUntil: 'networkidle0' });
+    
+  } catch (error) {
+    console.warn("Error discovering additional resources:", error);
+  }
+}
+
+function isBinaryContent(content: string): boolean {
+  // Check for binary content indicators
+  if (!content || typeof content !== 'string') return true;
+  
+  // Check for null bytes (common in binary files)
+  if (content.includes('\0')) return true;
+  
+  // Check for high percentage of non-printable characters
+  let nonPrintableCount = 0;
+  const sampleSize = Math.min(content.length, 1000); // Check first 1000 chars
+  
+  for (let i = 0; i < sampleSize; i++) {
+    const charCode = content.charCodeAt(i);
+    // Count characters that are not printable ASCII or common whitespace
+    if (charCode < 32 && charCode !== 9 && charCode !== 10 && charCode !== 13) {
+      nonPrintableCount++;
+    }
+  }
+  
+  // If more than 10% are non-printable, likely binary
+  return (nonPrintableCount / sampleSize) > 0.1;
 }
 
 function getImageMimeType(filename: string): string {

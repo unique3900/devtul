@@ -1,5 +1,61 @@
 [
   {
+    "scanId": "604491da-3381-4d4a-b443-d652d44497c9",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T05:25:04.792Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "d195a871-b17a-4a2f-b23a-d955a98aa1d8",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T05:16:57.725Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "32759bc1-0ab0-4ef5-9dc7-d7239d6b72e9",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T05:07:42.789Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "268bb973-99a8-4869-9dbd-899c1983c81e",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T04:58:06.857Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "588a38f0-7c56-4593-8aa9-99222c6d0b07",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T04:37:28.170Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "99a23580-a940-411a-b8f3-f86f4a6101f4",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T04:28:27.327Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
+    "scanId": "c256f8bd-4dd3-4b6f-b243-dc32e3507aba",
+    "url": "https://websearchpro.net/",
+    "timestamp": "2025-08-31T04:13:54.189Z",
+    "status": "completed",
+    "issuesCount": 0,
+    "fixedCount": 0
+  },
+  {
     "scanId": "ce5284f2-3c04-4324-8cc5-0c1ecb5a9066",
     "url": "https://gratisiskolan.se/",
     "timestamp": "2025-08-30T19:41:43.732Z",

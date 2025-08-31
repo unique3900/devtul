@@ -17,16 +17,23 @@ export async function GET(
     const htmlFile = version === 'fixed' ? 'index_fixed.html' : 'index.html';
     const htmlPath = path.join(downloadDir, htmlFile);
     
+    console.log(`Preview request for scan ${scanId}, version: ${version}`);
+    console.log(`Looking for file: ${htmlPath}`);
+    
     // Check if file exists
     try {
       await fs.access(htmlPath);
+      console.log(`✓ Found ${htmlFile}`);
     } catch {
+      console.log(`✗ ${htmlFile} not found`);
       // If fixed version doesn't exist, fall back to original
       if (version === 'fixed') {
+        console.log("Falling back to original version for fixed request");
         const originalPath = path.join(downloadDir, 'index.html');
         try {
           await fs.access(originalPath);
           const originalHtml = await fs.readFile(originalPath, 'utf-8');
+          console.log("Serving original HTML as fallback for fixed version");
           return new NextResponse(originalHtml, {
             headers: {
               'Content-Type': 'text/html',
@@ -38,6 +45,18 @@ export async function GET(
         }
       }
       return NextResponse.json({ error: "HTML file not found" }, { status: 404 });
+    }
+    
+    // Check if AI fixes were applied (for fixed version)
+    if (version === 'fixed') {
+      try {
+        const aiFixesPath = path.join(downloadDir, 'ai_fixes_applied.json');
+        const aiFixesData = await fs.readFile(aiFixesPath, 'utf-8');
+        const fixesInfo = JSON.parse(aiFixesData);
+        console.log(`AI fixes info: ${fixesInfo.appliedFixes}/${fixesInfo.totalFixes} applied, ${fixesInfo.confirmedFixes} confirmed`);
+      } catch {
+        console.warn("No AI fixes info found - may be serving original content as 'fixed'");
+      }
     }
     
     // Read and serve the HTML file
@@ -89,22 +108,49 @@ export async function GET(
               // Trigger resize event to reinitialize responsive components
               window.dispatchEvent(new Event('resize'));
               
-              // Reinitialize common animation libraries
-              if (window.AOS) window.AOS.refresh();
-              if (window.Swiper) {
-                // Reinitialize all Swiper instances
-                document.querySelectorAll('.swiper-container, .swiper').forEach(function(el) {
-                  if (el.swiper) el.swiper.update();
-                });
+              // Robust animation library initialization
+              try {
+                if (window.AOS) {
+                  window.AOS.refresh();
+                  console.log('AOS refreshed');
+                }
+                if (window.Swiper) {
+                  document.querySelectorAll('.swiper-container, .swiper').forEach(function(el) {
+                    if (el.swiper) {
+                      el.swiper.update();
+                      el.swiper.updateSize();
+                    }
+                  });
+                  console.log('Swiper updated');
+                }
+                if (window.ScrollMagic && window.controller) {
+                  window.controller.update(true);
+                  console.log('ScrollMagic updated');
+                }
+                if ((window.GSAP || window.gsap) && window.ScrollTrigger) {
+                  window.ScrollTrigger.refresh();
+                  console.log('GSAP ScrollTrigger refreshed');
+                }
+                // Cookie consent re-initialization
+                if (window.CookieConsent && typeof window.CookieConsent.process === 'function') {
+                  window.CookieConsent.process();
+                  console.log('CookieConsent re-initialized');
+                }
+              } catch (error) {
+                console.warn('Animation library initialization error:', error);
               }
-              if (window.ScrollMagic) {
-                // Refresh ScrollMagic scenes
-                if (window.controller) window.controller.update(true);
-              }
-              if (window.GSAP || window.gsap) {
-                // Refresh GSAP animations
-                if (window.ScrollTrigger) window.ScrollTrigger.refresh();
-              }
+              
+              // Retry initialization after a delay for libraries that might load later
+              setTimeout(function() {
+                try {
+                  if (window.CookieConsent && typeof window.CookieConsent.process === 'function') {
+                    window.CookieConsent.process();
+                  }
+                  window.dispatchEvent(new Event('scroll'));
+                } catch (e) {
+                  console.warn('Retry initialization error:', e);
+                }
+              }, 2000);
             }, 100);
           });
           

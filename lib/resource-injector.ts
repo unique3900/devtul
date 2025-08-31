@@ -26,14 +26,24 @@ export async function injectResourcesIntoHtml(
     return htmlContent;
   }
   
-  // Collect all CSS content to inject
+  // Collect all CSS content to inject (with deduplication)
   const allCssContent: string[] = [];
+  const processedCssFiles = new Set<string>();
   
   // Process all resources
   for (const [fileName, content] of Object.entries(resources)) {
-    if (fileName.endsWith('.css')) {
+    if (fileName.endsWith('.css') && !processedCssFiles.has(fileName)) {
+      processedCssFiles.add(fileName);
+      
+      // Validate content is actually CSS and not binary
+      const cssContentString = content.toString('utf8');
+      if (isBinaryContent(cssContentString)) {
+        console.warn(`Skipping binary CSS file: ${fileName}`);
+        continue;
+      }
+      
       // Collect CSS content for injection
-      let cssContent = content.toString();
+      let cssContent = cssContentString;
       
       // Fix relative URLs in CSS to point to our local images
       cssContent = cssContent.replace(/url\(['"]?([^'")\s]+)['"]?\)/gi, (match, url) => {
@@ -67,6 +77,17 @@ export async function injectResourcesIntoHtml(
   // Remove all existing CSS link tags
   modifiedHtml = modifiedHtml.replace(/<link[^>]*rel=['"]stylesheet['"][^>]*>/gi, '');
   
+  // Remove any existing corrupted style blocks that might contain binary data
+  modifiedHtml = modifiedHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (match) => {
+    // Check if the style block contains binary-like content
+    const content = match.replace(/<\/?style[^>]*>/gi, '');
+    if (isBinaryContent(content)) {
+      console.log('Removing corrupted style block');
+      return '';
+    }
+    return match;
+  });
+  
   // Keep JavaScript files as external but point to our local copies
   // This preserves the original execution context and loading behavior
   const scriptRegex = /<script[^>]*src=['"]([^'"]+)['"][^>]*><\/script>/gi;
@@ -83,8 +104,15 @@ export async function injectResourcesIntoHtml(
       const filename = pathname.split('/').pop() || '';
       
       // Find matching local JS file
-      for (const [fileName] of Object.entries(resources)) {
+      for (const [fileName, content] of Object.entries(resources)) {
         if (fileName.endsWith('.js') && (fileName.includes(filename) || filename.includes(fileName.split('_')[0]))) {
+          // Validate that the JS file is not binary
+          const jsContentString = content.toString('utf8');
+          if (isBinaryContent(jsContentString)) {
+            console.warn(`Skipping binary JS file: ${fileName}`);
+            continue;
+          }
+          
           // Keep as external script but point to our local file
           const localScriptTag = originalTag.replace(src, `./${fileName}`);
           scriptReplacements.push({
@@ -149,6 +177,29 @@ export async function injectResourcesIntoHtml(
   console.log(`Injected ${allCssContent.length} CSS files directly and linked ${scriptReplacements.length} JS files as external resources`);
   
   return modifiedHtml;
+}
+
+function isBinaryContent(content: string): boolean {
+  // Check for binary content indicators
+  if (!content || typeof content !== 'string') return true;
+  
+  // Check for null bytes (common in binary files)
+  if (content.includes('\0')) return true;
+  
+  // Check for high percentage of non-printable characters
+  let nonPrintableCount = 0;
+  const sampleSize = Math.min(content.length, 1000); // Check first 1000 chars
+  
+  for (let i = 0; i < sampleSize; i++) {
+    const charCode = content.charCodeAt(i);
+    // Count characters that are not printable ASCII or common whitespace
+    if (charCode < 32 && charCode !== 9 && charCode !== 10 && charCode !== 13) {
+      nonPrintableCount++;
+    }
+  }
+  
+  // If more than 10% are non-printable, likely binary
+  return (nonPrintableCount / sampleSize) > 0.1;
 }
 
 function getImageMimeType(filename: string): string {

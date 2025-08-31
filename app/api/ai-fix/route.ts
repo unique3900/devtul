@@ -47,9 +47,11 @@ export async function POST(request: NextRequest) {
     try {
       // Try to read the original HTML without resource injection first
       originalHtml = await fs.readFile(path.join(downloadDir, "index_original.html"), "utf-8");
+      console.log("Using original HTML without resource injection for AI processing");
     } catch {
       // Fallback to the processed version if original doesn't exist
       originalHtml = await fs.readFile(htmlPath, "utf-8");
+      console.log("Using processed HTML for AI processing (original not found)");
     }
     
     const dom = new JSDOM(originalHtml, {
@@ -70,11 +72,95 @@ export async function POST(request: NextRequest) {
       totalFixed += fixes.filter(f => f.fixed).length;
     }
 
-    // Apply fixes to the DOM
-    applyFixesToDOM(document, fixResults);
-
-    // Save the fixed HTML with resource injection
-    const fixedHtml = dom.serialize();
+    // Apply fixes using direct string replacement (more reliable than DOM manipulation)
+    let fixedHtml = originalHtml;
+    let appliedCount = 0;
+    
+    console.log(`Applying ${fixResults.length} fixes using direct string replacement...`);
+    
+    for (const fix of fixResults) {
+      if (!fix.fixed || !fix.fixedElement || !fix.originalElement) {
+        console.log(`Skipping fix ${fix.issueId}: not fixed or missing elements`);
+        continue;
+      }
+      
+      try {
+        // Clean and normalize the HTML strings for comparison
+        const originalClean = fix.originalElement.trim().replace(/\s+/g, ' ');
+        const fixedClean = fix.fixedElement.trim();
+        
+        // Try exact match first
+        if (fixedHtml.includes(originalClean)) {
+          fixedHtml = fixedHtml.replace(originalClean, fixedClean);
+          appliedCount++;
+          console.log(`✓ Applied fix ${fix.issueId} using exact match`);
+        } 
+        // Try without extra whitespace
+        else if (fixedHtml.includes(fix.originalElement.trim())) {
+          fixedHtml = fixedHtml.replace(fix.originalElement.trim(), fixedClean);
+          appliedCount++;
+          console.log(`✓ Applied fix ${fix.issueId} using trimmed match`);
+        }
+        // Try partial matching for complex elements
+        else {
+          // Extract key identifying parts (like href, src, class, id)
+          const hrefMatch = fix.originalElement.match(/href=['"]([^'"]+)['"]/);
+          const srcMatch = fix.originalElement.match(/src=['"]([^'"]+)['"]/);
+          const classMatch = fix.originalElement.match(/class=['"]([^'"]+)['"]/);
+          const idMatch = fix.originalElement.match(/id=['"]([^'"]+)['"]/);
+          
+          let found = false;
+          
+          if (hrefMatch) {
+            const href = hrefMatch[1];
+            const regex = new RegExp(`<[^>]*href=['"]${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"][^>]*>.*?</[^>]+>`, 'gi');
+            const matches = fixedHtml.match(regex);
+            if (matches && matches.length > 0) {
+              fixedHtml = fixedHtml.replace(matches[0], fixedClean);
+              appliedCount++;
+              found = true;
+              console.log(`✓ Applied fix ${fix.issueId} using href match`);
+            }
+          }
+          
+          if (!found && srcMatch) {
+            const src = srcMatch[1];
+            const regex = new RegExp(`<[^>]*src=['"]${src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"][^>]*>`, 'gi');
+            const matches = fixedHtml.match(regex);
+            if (matches && matches.length > 0) {
+              fixedHtml = fixedHtml.replace(matches[0], fixedClean);
+              appliedCount++;
+              found = true;
+              console.log(`✓ Applied fix ${fix.issueId} using src match`);
+            }
+          }
+          
+          if (!found) {
+            console.warn(`✗ Could not find element for fix ${fix.issueId}`);
+            console.warn(`Looking for: ${fix.originalElement.substring(0, 100)}...`);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`Failed to apply fix ${fix.issueId}:`, error);
+      }
+    }
+    
+    console.log(`Applied ${appliedCount} out of ${fixResults.length} fixes using string replacement`);
+    
+    // Validate that fixes were actually applied
+    console.log("Validating applied fixes in final HTML...");
+    let confirmedFixes = 0;
+    const successfulFixes = fixResults.filter(f => f.fixed);
+    for (const fix of successfulFixes) {
+      if (fix.fixedElement && fixedHtml.includes(fix.fixedElement.substring(0, 50))) {
+        console.log(`✓ Fix ${fix.issueId} confirmed in final HTML`);
+        confirmedFixes++;
+      } else {
+        console.warn(`✗ Fix ${fix.issueId} NOT found in final HTML`);
+      }
+    }
+    console.log(`${confirmedFixes} out of ${successfulFixes.length} fixes confirmed in final HTML`);
     
     // Read metadata to get the original URL for resource injection
     let originalUrl = '';
@@ -87,8 +173,40 @@ export async function POST(request: NextRequest) {
     }
     
     // Inject resources into the fixed HTML
-    const fixedHtmlWithResources = await injectResourcesIntoHtml(fixedHtml, downloadDir, originalUrl);
-    await fs.writeFile(path.join(downloadDir, "index_fixed.html"), fixedHtmlWithResources);
+    console.log("Injecting resources into fixed HTML...");
+    console.log(`Fixed HTML length before injection: ${fixedHtml.length}`);
+    
+    try {
+      // Save the fixed HTML without resources first (for debugging)
+      await fs.writeFile(path.join(downloadDir, "index_fixed_raw.html"), fixedHtml);
+      console.log("Saved raw fixed HTML (without resources) for debugging");
+      
+      const fixedHtmlWithResources = await injectResourcesIntoHtml(fixedHtml, downloadDir, originalUrl);
+      console.log(`Fixed HTML length after injection: ${fixedHtmlWithResources.length}`);
+      
+      // Validate that CSS was actually injected
+      const cssCount = (fixedHtmlWithResources.match(/<style[^>]*>/gi) || []).length;
+      const scriptCount = (fixedHtmlWithResources.match(/<script[^>]*src=/gi) || []).length;
+      console.log(`Injected ${cssCount} CSS blocks and ${scriptCount} script references`);
+      
+      // Save the final fixed HTML with resources
+      await fs.writeFile(path.join(downloadDir, "index_fixed.html"), fixedHtmlWithResources);
+      console.log("Fixed HTML with resources saved successfully");
+      
+      // Also create a marker file to indicate AI fixes were applied
+      await fs.writeFile(path.join(downloadDir, "ai_fixes_applied.json"), JSON.stringify({
+        timestamp: new Date().toISOString(),
+        appliedFixes: appliedCount,
+        totalFixes: fixResults.length,
+        confirmedFixes: confirmedFixes
+      }, null, 2));
+      
+    } catch (error) {
+      console.error("Error injecting resources into fixed HTML:", error);
+      // Fallback: save without resource injection
+    await fs.writeFile(path.join(downloadDir, "index_fixed.html"), fixedHtml);
+      console.log("Saved fixed HTML without resource injection due to error");
+    }
 
     // Create fix report
     const fixReport = {
@@ -316,6 +434,8 @@ function parseAIResponse(response: string, issues: AccessibilityIssue[]): FixRes
       .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
       .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted keys
       .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single quotes with double quotes
+      .replace(/"\s*"og"\s*:/g, '"og":') // Fix "og": issues
+      .replace(/"\s*"([^"]+)"\s*:/g, '"$1":') // Fix other quoted property names
       .replace(/\n/g, '\\n') // Escape newlines in strings
       .replace(/\r/g, '\\r') // Escape carriage returns
       .replace(/\t/g, '\\t'); // Escape tabs
@@ -366,56 +486,7 @@ function parseAIResponse(response: string, issues: AccessibilityIssue[]): FixRes
   }
 }
 
-function applyFixesToDOM(document: Document, fixResults: FixResult[]): void {
-  for (const fix of fixResults) {
-    if (!fix.fixed || !fix.fixedElement) continue;
-    
-    try {
-      // Find the element to replace
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = fix.originalElement;
-      const originalElement = tempDiv.firstElementChild;
-      
-      if (!originalElement) continue;
-      
-      // Create the fixed element
-      const fixedDiv = document.createElement('div');
-      fixedDiv.innerHTML = fix.fixedElement;
-      const fixedElement = fixedDiv.firstElementChild;
-      
-      if (!fixedElement) continue;
-      
-      // Find matching elements in the document
-      const selector = createSelectorFromElement(originalElement);
-      const elementsToReplace = document.querySelectorAll(selector);
-      
-      // Replace the first matching element
-      if (elementsToReplace.length > 0) {
-        const targetElement = elementsToReplace[0];
-        
-        // Preserve important attributes that might be needed for JavaScript functionality
-        const importantAttributes = ['id', 'class', 'data-*', 'onclick', 'onload', 'role'];
-        for (const attr of importantAttributes) {
-          if (attr === 'data-*') {
-            // Copy all data attributes
-            Array.from(targetElement.attributes).forEach(attribute => {
-              if (attribute.name.startsWith('data-') && !fixedElement.hasAttribute(attribute.name)) {
-                fixedElement.setAttribute(attribute.name, attribute.value);
-              }
-            });
-          } else if (targetElement.hasAttribute(attr) && !fixedElement.hasAttribute(attr)) {
-            fixedElement.setAttribute(attr, targetElement.getAttribute(attr) || '');
-          }
-        }
-        
-        targetElement.parentNode?.replaceChild(fixedElement.cloneNode(true), targetElement);
-      }
-      
-    } catch (error) {
-      console.error(`Failed to apply fix for ${fix.issueId}:`, error);
-    }
-  }
-}
+// Removed old DOM manipulation function - now using direct string replacement for better reliability
 
 function createSelectorFromElement(element: Element): string {
   let selector = element.tagName.toLowerCase();

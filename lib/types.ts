@@ -7,19 +7,24 @@ export interface ComplianceOptions {
 }
 
 export interface AccessibilityResult {
-  id: string;
-  url: string;
-  message: string;
-  help: string;
-  element: string;
-  elementPath: string;
-  impact: string;
-  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Info';
-  tags: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  scanId: string;
-  screenshotPath?: string;
+  id: string
+  scanId: string
+  url: string
+  message: string
+  element?: string
+  severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Info'
+  impact?: string
+  help?: string
+  tags?: string[]
+  elementPath?: string
+  details?: Record<string, any>
+  createdAt: Date
+  updatedAt: Date
+  // Additional fields for UI
+  scanType?: 'wcag' | 'security'
+  category?: string
+  estimatedFixTime?: string
+  screenshotPath?: string
 }
 
 export interface AccessibilitySummary {
